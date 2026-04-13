@@ -1479,10 +1479,9 @@
   </div>
 
   <script>
-    const RUNTIME_API_BASE = resolveApiBase();
     const APP_CONFIG = {
-      analyzeEndpoint: `${RUNTIME_API_BASE || ''}/api/analyze`,
-      healthEndpoint: `${RUNTIME_API_BASE || ''}/health`
+      analyzeEndpoint: 'https://journal-49pm.onrender.com/api/analyze',
+      healthEndpoint: 'https://journal-49pm.onrender.com/health'
     };
 
     const form = document.getElementById('analyzer-form');
@@ -1789,10 +1788,6 @@
       const timeout = setTimeout(() => controller.abort(), 60000);
 
       try {
-        if (isGitHubPagesHost() && !RUNTIME_API_BASE) {
-          throw new Error('GitHub Pages는 정적 호스팅이라 /api/analyze를 처리하지 못합니다. Render URL로 접속하거나, URL 뒤에 ?apiBase=https://{your-render-app}.onrender.com 을 추가해주세요.');
-        }
-
         const res = await fetch(APP_CONFIG.analyzeEndpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -1801,8 +1796,8 @@
         });
         const body = await res.json().catch(() => ({}));
         if (!res.ok || !body.ok) {
-          if ((res.status === 404 || res.status === 405) && isGitHubPagesHost()) {
-            throw new Error('현재 도메인에서는 분석 API를 제공하지 않습니다. Render 서버 URL로 접속하거나 ?apiBase=https://{your-render-app}.onrender.com 을 붙여주세요.');
+          if (res.status === 404 || res.status === 405) {
+            throw new Error('분석 API 호출 경로가 올바르지 않습니다. Render 서버(https://journal-49pm.onrender.com) 상태를 확인해주세요.');
           }
           throw new Error(body.error || '데이터를 가져오지 못했습니다. 잠시 후 다시 시도해주세요.');
         }
