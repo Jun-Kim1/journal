@@ -2027,25 +2027,45 @@
     async function fetchData(config) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 60000);
+      const endpoints = [APP_CONFIG.analyzeEndpoint];
+      if (window.location.protocol === 'file:') {
+        endpoints.push('http://127.0.0.1:3000/api/analyze', 'http://localhost:3000/api/analyze');
+      }
 
       try {
-        const res = await fetch(APP_CONFIG.analyzeEndpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-          body: JSON.stringify(config),
-          signal: controller.signal
-        });
-        const body = await res.json().catch(() => ({}));
-        if (!res.ok || !body.ok) {
-          if (res.status === 404 || res.status === 405) {
-            throw new Error('분석 API 호출 경로가 올바르지 않습니다. Render 서버(https://journal-49pm.onrender.com) 상태를 확인해주세요.');
+        let lastError = null;
+        for (const endpoint of endpoints) {
+          try {
+            const res = await fetch(endpoint, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+              body: JSON.stringify(config),
+              signal: controller.signal
+            });
+            const body = await res.json().catch(() => ({}));
+            if (!res.ok || !body.ok) {
+              if (res.status === 404 || res.status === 405) {
+                throw new Error('분석 API 호출 경로가 올바르지 않습니다. 서버 상태를 확인해주세요.');
+              }
+              throw new Error(body.error || '데이터를 가져오지 못했습니다. 잠시 후 다시 시도해주세요.');
+            }
+            return body;
+          } catch (innerError) {
+            lastError = innerError;
+            const isNetworkError = innerError && innerError.name === 'TypeError';
+            const hasNext = endpoint !== endpoints[endpoints.length - 1];
+            if (!(isNetworkError && hasNext)) {
+              throw innerError;
+            }
           }
-          throw new Error(body.error || '데이터를 가져오지 못했습니다. 잠시 후 다시 시도해주세요.');
         }
-        return body;
+        throw lastError || new Error('분석 API에 연결하지 못했습니다.');
       } catch (error) {
         if (error && error.name === 'AbortError') {
           throw new Error('응답 대기 시간이 길어 분석을 중단했습니다. 잠시 후 다시 시도해주세요.');
+        }
+        if (error && error.name === 'TypeError') {
+          throw new Error('네트워크 연결 또는 CORS 설정 문제로 분석 API 호출에 실패했습니다. 서버를 재배포하거나 http://localhost:3000 으로 접속해 다시 시도해주세요.');
         }
         throw error;
       } finally {

@@ -1729,19 +1729,8 @@ function sendJson(res, statusCode, payload) {
 }
 
 function setCorsHeaders(req, res) {
-	const allowedOrigins = new Set([
-		'https://Jun-Kim1.github.io',
-		'https://jun-kim1.github.io',
-		'http://localhost:3000',
-		'http://127.0.0.1:3000'
-	]);
-	const origin = String(req.headers.origin || '');
-	if (!origin) {
-		res.setHeader('Access-Control-Allow-Origin', '*');
-	} else if (allowedOrigins.has(origin)) {
-		res.setHeader('Access-Control-Allow-Origin', origin);
-		res.setHeader('Vary', 'Origin');
-	}
+	// Public API endpoint: allow all origins (including file:// -> Origin: null)
+	res.setHeader('Access-Control-Allow-Origin', '*');
 	res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
 	res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 }
