@@ -289,7 +289,7 @@ async function analyzeTopicSources(payload) {
 	const serviceKeyMode = String(payload.serviceKeyMode || 'auto');
 	const nanetApiKey = NANET_CONFIG.apiKey;
 	const openAlexApiKey = OPENALEX_CONFIG.apiKey;
-	const openAlexMailto =
+	const openAlexMailto = OPENALEX_CONFIG.mailto;
 
 	const translatedTopic = await translateTopicToEnglish(topic);
 	const globalQueryTopic = buildGlobalQueryText(topic, translatedTopic);
