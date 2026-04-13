@@ -1869,6 +1869,24 @@ function buildAnalysisYearDistribution(records, minYear, maxYear) {
 	return Array.from(map.entries()).map(([year, count]) => ({ year, count }));
 }
 
+function computeDistributionEntropy(counts) {
+	const total = counts.reduce((sum, value) => sum + value, 0);
+	if (!total) {
+		return 0;
+	}
+
+	const probabilities = counts
+		.filter((count) => count > 0)
+		.map((count) => count / total);
+	if (!probabilities.length) {
+		return 0;
+	}
+
+	const entropy = -probabilities.reduce((sum, p) => sum + (p * Math.log2(p)), 0);
+	const maxEntropy = Math.log2(probabilities.length);
+	return maxEntropy > 0 ? entropy / maxEntropy : 0;
+}
+
 function extractKeywordFrequencyForAnalysis(records, topicTokens) {
 	const map = new Map();
 	records.forEach((record) => {
