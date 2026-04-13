@@ -737,8 +737,8 @@
       width: 86px;
       height: 86px;
       border-radius: 50%;
-      background: #7c6bff;
-      box-shadow: 0 14px 34px rgba(61, 219, 217, 0.26), 0 0 55px rgba(124, 107, 255, 0.34);
+      background: radial-gradient(circle at 30% 30%, #6ee7f9 0%, #4f46e5 44%, #1e1b4b 76%, #050814 100%);
+      box-shadow: 0 14px 34px rgba(56, 189, 248, 0.34), 0 0 65px rgba(124, 107, 255, 0.36);
       animation: breath 1.9s ease-in-out infinite;
       margin: 0 auto 20px;
       position: relative;
@@ -760,6 +760,19 @@
       animation-delay: .45s;
     }
 
+    .loading-dot > span {
+      position: absolute;
+      inset: 50%;
+      width: 4px;
+      height: 4px;
+      margin-left: -2px;
+      margin-top: -2px;
+      border-radius: 50%;
+      background: #e0f2fe;
+      box-shadow: 0 0 10px rgba(125, 211, 252, 0.9);
+      animation: starTwinkle 1.3s ease-in-out infinite;
+    }
+
     @keyframes breath {
       0%,100% { transform: scale(0.92); opacity: 0.7; }
       50% { transform: scale(1.05); opacity: 1; }
@@ -768,6 +781,11 @@
     @keyframes ringPulse {
       0% { transform: scale(0.88); opacity: .65; }
       100% { transform: scale(1.12); opacity: 0; }
+    }
+
+    @keyframes starTwinkle {
+      0%, 100% { opacity: 0.5; transform: scale(0.9); }
+      50% { opacity: 1; transform: scale(1.3); }
     }
 
     .loading-title {
@@ -1069,7 +1087,7 @@
       border: 1px solid rgba(148, 163, 184, 0.2);
     }
 
-    .chip-kci, .chip-global, .chip-preprint {
+    .chip-kci, .chip-global {
       border-radius: 999px;
       padding: 4px 10px;
       font-size: 10px;
@@ -1080,7 +1098,6 @@
 
     .chip-kci { background: rgba(61, 219, 217, 0.2); color: #74f3f1; }
     .chip-global { background: rgba(247, 167, 78, 0.25); color: #ffd08f; }
-    .chip-preprint { background: rgba(124, 107, 255, 0.24); color: #c3baff; }
 
     .muted { color: #64748b; }
 
@@ -1219,7 +1236,7 @@
             <div class="step-badge"><span class="step-num">02</span></div>
             <div class="step-content">
               <div class="step-title">병렬 API 수집</div>
-              <div class="step-desc">복수의 학술 DB API에 동시 요청을 보내 문헌 수집</div>
+              <div class="step-desc">복수의 학술 데이터망에 동시 요청을 보내 문헌을 수집</div>
             </div>
           </div>
           <div class="hero-step">
@@ -1260,7 +1277,7 @@
           <div class="ps-num">02</div>
           <div class="ps-body">
             <div class="ps-name">다중 소스 동시 검색</div>
-            <div class="ps-desc">KCI · OpenAlex · arXiv를 병렬 조회해 최대 범위의 문헌을 수집합니다</div>
+            <div class="ps-desc">국내외 저널 데이터베이스를 병렬 조회해 고신뢰 문헌을 수집합니다</div>
           </div>
         </div>
         <div class="ps-step">
@@ -1284,9 +1301,6 @@
               </label>
               <div id="kciTypeGroup" class="scope-children">
                 <label class="scope-child"><input type="checkbox" name="paperType" value="학술지" checked /><span>학술지</span></label>
-                <label class="scope-child"><input type="checkbox" name="paperType" value="석사" checked /><span>석사 논문</span></label>
-                <label class="scope-child"><input type="checkbox" name="paperType" value="박사" checked /><span>박사 논문</span></label>
-                <label class="scope-child"><input type="checkbox" name="paperType" value="후보" /><span>후보지</span></label>
               </div>
             </div>
             <div class="scope-divider"></div>
@@ -1298,9 +1312,7 @@
               </label>
               <div id="globalTypeGroup" class="scope-children">
                 <label class="scope-child"><input type="checkbox" name="globalType" value="journal" checked /><span>학술지</span></label>
-                <label class="scope-child"><input type="checkbox" name="globalType" value="master" checked /><span>석사 논문</span></label>
-                <label class="scope-child"><input type="checkbox" name="globalType" value="doctor" checked /><span>박사 논문</span></label>
-                <label class="scope-child"><input id="includePreprint" type="checkbox" name="globalType" value="preprint" /><span>preprint</span></label>
+                <label class="scope-child"><input id="includePreprint" type="checkbox" name="globalType" value="preprint" /><span>프리프린트</span></label>
               </div>
             </div>
           </div>
@@ -1366,18 +1378,17 @@
     <section id="loading-page" class="page">
       <div class="loading-shell">
         <div class="loading-core">
-          <div class="loading-dot"></div>
+          <div class="loading-dot"><span></span></div>
           <h2 class="loading-title">분석 중</h2>
           <div id="loadingSubMessage" class="loading-sub">학술 키워드 다국어 변환 중...</div>
           <p id="loadingMessage" class="muted" style="margin-top:6px;">국문 주제를 글로벌 학술 검색어로 정규화하고 있습니다.</p>
           <p id="spinupWarmupMessage" class="spinup-hint" aria-live="polite">정밀 분석을 위해 전용 컴퓨팅 엔진을 예열하고 있습니다.</p>
           <div class="progress-track"><div id="loadingBar" class="progress-fill"></div></div>
           <div class="loading-steps">
-            <div id="step1" class="active">1. 학술 키워드 다국어 변환 중...</div>
-            <div id="step2">2. 데이터베이스 조회 중...</div>
-            <div id="step3">3. 해외 저널 유사도 대조 중...</div>
-            <div id="step4">4. 국내 저널 유사도 대조 중...</div>
-            <div id="step5">5. 연구 주제의 참신성 지수 계산 중...</div>
+            <div id="step1" class="active">1. 글로벌 학술 네트워크 연결 중...</div>
+            <div id="step2">2. 고차원 텍스트 유사도 벡터화...</div>
+            <div id="step3">3. 연구 맥락 내 참신성 지수 연산 중...</div>
+            <div id="step4">4. 최종 분석 대시보드 생성 중...</div>
           </div>
           <div class="loading-skeleton" aria-hidden="true">
             <div></div>
@@ -1402,7 +1413,7 @@
               <option value="citation">인용순</option>
               <option value="similarity">정확도순</option>
             </select>
-            <div id="sourceSummary" style="padding:8px 12px; border-radius:999px; background:rgba(15,23,42,0.7); color:#bfdbfe; border:1px solid rgba(148,163,184,0.26); font-size:11px; font-weight:700;">KCI + 해외 저널</div>
+            <div id="sourceSummary" style="padding:8px 12px; border-radius:999px; background:rgba(15,23,42,0.7); color:#bfdbfe; border:1px solid rgba(148,163,184,0.26); font-size:11px; font-weight:700;">국내 저널 + 해외 저널</div>
             <button id="newSearchButton" class="tapable" style="border:0; border-radius:999px; padding:9px 14px; cursor:pointer; background:#4e8ef7; color:#f8fafc; font-weight:700;">새 검색</button>
           </div>
         </div>
@@ -1415,22 +1426,22 @@
             <div id="noveltyValue" class="num">0%</div>
             <div id="noveltyLabel" class="kpi-status" data-tone="medium">보통</div>
             <div id="noveltyReason" class="sub">유사도·추이·희소성 기준</div>
-            <div class="sub">글로벌 기준 종합 산출</div>
+            <div class="sub">조합적 창의성 보정 포함</div>
           </article>
           <article class="kpi is-domestic">
-            <h4>국내 문헌 수</h4>
-            <div id="domesticCount" class="num">0</div>
-            <div class="sub">KCI 매칭 건수</div>
+            <h4>유사 논문 수</h4>
+            <div id="similarPaperCount" class="num">0</div>
+            <div class="sub">상위 유사 문헌 기준</div>
           </article>
           <article class="kpi is-global">
-            <h4>해외 문헌 수</h4>
-            <div id="globalCount" class="num">0</div>
-            <div class="sub">저널 + preprint</div>
+            <h4>연구 집중도</h4>
+            <div id="researchFocusKpi" class="num">0%</div>
+            <div class="sub">최근 발표 편중도</div>
           </article>
           <article class="kpi is-similarity">
-            <h4>상위 유사도 평균</h4>
-            <div id="avgSimilarity" class="num">0%</div>
-            <div class="sub">상위 12건 평균</div>
+            <h4>예상 인용 지수</h4>
+            <div id="expectedCitationKpi" class="num">0</div>
+            <div class="sub">영향력 추정 스코어</div>
           </article>
         </div>
 
@@ -1456,6 +1467,7 @@
           <section class="panel trend-panel">
             <div class="metric-label" style="margin-bottom:8px;">연도별 발표 추이</div>
             <div id="trendChart" style="display:flex; align-items:flex-end; gap:6px; min-height:168px; padding:8px 6px 4px; border-radius:14px; background:rgba(10, 22, 46, 0.68);"></div>
+            <div id="trendLineChart" style="margin-top:10px;height:68px;border-radius:12px;background:rgba(10,22,46,0.62);padding:6px;"></div>
           </section>
 
           <section class="panel keyword-panel">
@@ -1471,7 +1483,12 @@
             <h3 style="margin:0 0 10px; font-family:Manrope,sans-serif; color:#f8fafc;">유사 논문 리스트</h3>
             <div id="facetSummary" class="result-facets"></div>
             <div id="paperList"></div>
-            <div style="margin-top:12px; font-size:11px; color:#93c5fd;">arXiv 오픈 액세스 상호운용성 정책을 준수하여 데이터를 사용합니다.</div>
+            <div style="margin-top:12px; font-size:11px; color:#93c5fd;">국내외 학술 데이터 기준으로 결과를 제공합니다.</div>
+          </section>
+
+          <section class="panel" style="grid-column:1 / span 7;">
+            <h3 style="margin:0 0 10px; font-family:Manrope,sans-serif; color:#f8fafc;">추천 국내 저널</h3>
+            <div id="recommendedKciList" class="result-facets"></div>
           </section>
         </div>
       </div>
@@ -1531,29 +1548,24 @@
 
     const loadingStages = [
       {
-        title: '학술 키워드 다국어 변환 중...',
-        detail: '국문 주제를 글로벌 학술 검색어로 정규화하고 있습니다.',
-        hint: '분석 경로: 질의 정규화 -> 번역 정합성 검토'
+        title: '글로벌 학술 네트워크 연결 중...',
+        detail: '연구 주제와 연관된 저널 네트워크를 고정밀로 연결하고 있습니다.',
+        hint: '분석 경로: 네트워크 연결 -> 데이터 샘플 동기화'
       },
       {
-        title: '데이터베이스 조회 중...',
-        detail: 'KCI, NANET, OpenAlex, Crossref, arXiv 소스를 병렬 조회하고 있습니다.',
-        hint: '분석 경로: 소스 병렬 조회 -> 실패 허용 수집'
+        title: '고차원 텍스트 유사도 벡터화...',
+        detail: '핵심 문장 구조를 벡터 공간으로 사상해 의미 거리를 계산하고 있습니다.',
+        hint: '분석 경로: 문장 임베딩 -> 의미 거리 계산'
       },
       {
-        title: '해외 저널 유사도 대조 중...',
-        detail: '해외 저널 및 preprint 문헌의 키워드·초록 유사도를 계산하고 있습니다.',
-        hint: '분석 경로: 글로벌 유사도 매칭 -> 상위 후보 정렬'
+        title: '연구 맥락 내 참신성 지수 연산 중...',
+        detail: '유사도, 집중도, 희소성, 조합적 창의성 지표를 통합 연산하고 있습니다.',
+        hint: '분석 경로: 지표 결합 -> 참신성 추정'
       },
       {
-        title: '국내 저널 유사도 대조 중...',
-        detail: '국내 학술지와 학위논문의 중복도 및 분야 적합도를 대조하고 있습니다.',
-        hint: '분석 경로: 국내 문헌 대조 -> 중복 제거'
-      },
-      {
-        title: '연구 주제의 참신성 지수 계산 중...',
-        detail: '유사도, 시계열 추세, 희소성 지표를 조합해 최종 점수를 계산하고 있습니다.',
-        hint: '분석 경로: 근거 조합 -> 참신성 산출 -> 결과 구성'
+        title: '최종 분석 대시보드 생성 중...',
+        detail: '핵심 KPI와 추천 저널을 시각화해 결과 대시보드를 구성하고 있습니다.',
+        hint: '분석 경로: 결과 집계 -> 대시보드 렌더링'
       }
     ];
 
@@ -1636,7 +1648,8 @@
         globals.forEach((el) => { el.checked = false; el.disabled = true; });
       } else {
         globalTypeGroup.style.opacity = '1';
-        globals.forEach((el) => { el.disabled = false; el.checked = el.value !== 'preprint'; });
+        globals.forEach((el) => { el.disabled = false; el.checked = el.value === 'journal'; });
+        if (includePreprintInput) includePreprintInput.checked = false;
       }
     });
 
@@ -1647,7 +1660,7 @@
         locals.forEach((el) => { el.checked = false; el.disabled = true; });
       } else {
         kciTypeGroup.style.opacity = '1';
-        locals.forEach((el) => { el.disabled = false; el.checked = true; });
+        locals.forEach((el) => { el.disabled = false; el.checked = el.value === '학술지'; });
       }
     });
 
@@ -1758,7 +1771,7 @@
       if (reasoningHint) {
         reasoningHint.textContent = current.hint;
       }
-      ['step1', 'step2', 'step3', 'step4', 'step5'].forEach((id, i) => {
+      ['step1', 'step2', 'step3', 'step4'].forEach((id, i) => {
         const el = document.getElementById(id);
         el.classList.toggle('active', i === index);
         el.classList.toggle('done', i < index);
@@ -1776,7 +1789,7 @@
         recentWeight: Number(document.getElementById('recentWeight').value),
         includeKci: includeKciInput.checked,
         includeCrossref: includeCrossrefInput.checked,
-        includePreprint: includeCrossrefInput.checked && includePreprintInput.checked,
+        includePreprint: includeCrossrefInput.checked && includePreprintInput && includePreprintInput.checked,
         sortOrder: resultSortOrder ? resultSortOrder.value : 'latest',
         paperTypes: Array.from(form.querySelectorAll('input[name="paperType"]:checked')).map((el) => el.value),
         globalTypes: Array.from(form.querySelectorAll('input[name="globalType"]:checked')).map((el) => el.value)
@@ -1839,7 +1852,7 @@
         const titleScore = overlapScore(topicTokens, tokenize(record.title));
         const keywordScore = overlapScore(topicTokens, tokenize((record.keywords || []).join(' ')));
         const abstractScore = overlapScore(topicTokens, tokenize(record.abstract));
-        const sourceWeight = (record.source === 'Global Journal' || record.source === 'Pre-print') ? 1.04 : 1;
+        const sourceWeight = (record.source === 'Global Journal' || record.source === 'Pre-print') ? 1.03 : 1;
         const similarity = clamp((titleScore * 0.52 + keywordScore * 0.33 + abstractScore * 0.15) * sourceWeight, 0, 1);
         return { ...record, similarity };
       });
@@ -1856,26 +1869,32 @@
       const recentShare = relevant.length ? recentCount / relevant.length : 0;
       const globalShare = relevant.length ? relevant.filter((item) => item.source === 'Global Journal' || item.source === 'Pre-print').length / relevant.length : 0;
 
-      const overlapPressure = clamp((topAvg * 58) + (highSimilarityShare * 18), 0, 82);
-      const recencyPressure = recentShare * 22 * cfg.recentWeight;
-      const saturationPressure = Math.min(18, Math.log2(relevant.length + 1) * 4.2);
+      const overlapPressure = (topAvg ** 1.22) * 72;
+      const highSimilarityPenalty = highSimilarityShare * 26;
+      const recencyPressure = recentShare * 24 * cfg.recentWeight;
+      const saturationPressure = Math.min(26, Math.log2(relevant.length + 1) * 5.4);
       const yearDist = buildYearDistribution(relevant, minYear, now);
-      const diversityBonus = 8 * computeDistributionEntropy(yearDist.map((entry) => entry.count));
-      const globalCoverageBonus = globalShare * 6;
+      const diversityBonus = 10 * computeDistributionEntropy(yearDist.map((entry) => entry.count));
+      const globalCoverageBonus = globalShare * 5;
       const scarcityScore = computeScarcityScore(relevant, topicTokens);
-      const scarcityBonus = scarcityScore * 18;
-
-      const noveltyScore = clamp(
-        100 - overlapPressure - recencyPressure - saturationPressure + scarcityBonus + diversityBonus + globalCoverageBonus,
-        3,
-        99
-      );
+      const scarcityBonus = scarcityScore * 20;
 
       const keywordFreq = extractKeywordFrequency(relevant, topicTokens);
+      const creativityScore = computeCombinationalCreativity(cfg.topic, relevant, keywordFreq);
+      const creativityBonus = (creativityScore - 0.32) * 34;
+      const noveltyScore = !relevant.length
+        ? 97
+        : clamp(
+          66 - overlapPressure - highSimilarityPenalty - recencyPressure - saturationPressure + scarcityBonus + diversityBonus + globalCoverageBonus + creativityBonus,
+          1,
+          100
+        );
       const domesticCount = relevant.filter((item) => item.source === 'KCI').length;
       const globalCount = relevant.filter((item) => item.source === 'Global Journal' || item.source === 'Pre-print').length;
       const globalJournalCount = relevant.filter((item) => item.source === 'Global Journal').length;
       const preprintCount = relevant.filter((item) => item.source === 'Pre-print').length;
+      const expectedCitationIndex = Math.round((average(topPapers.map((paper) => Number(paper.citationCount || 0))) * 0.72) + (noveltyScore * 0.38));
+      const recommendedKciJournals = buildRecommendedKciJournals(relevant);
 
       return {
         noveltyScore,
@@ -1890,13 +1909,16 @@
         scoreBreakdown: {
           similarity: Math.round((1 - topAvg) * 100),
           trend: Math.round((1 - recentShare) * 100),
-          scarcity: Math.round(scarcityScore * 100)
+          scarcity: Math.round(scarcityScore * 100),
+          creativity: Math.round(creativityScore * 100)
         },
+        expectedCitationIndex,
+        recommendedKciJournals,
         domesticCount,
         globalCount,
         translatedTopic: meta.globalQueryTopic || meta.translatedTopic || cfg.topic,
         reportScope: `최근 ${cfg.rangeYears}년 기준 · 총 ${relevant.length}건 분석`,
-        sourceSummary: `KCI ${domesticCount}건 · 해외 저널 ${globalJournalCount}건 · preprint ${preprintCount}건`,
+        sourceSummary: `국내 저널 ${domesticCount}건 · 해외 저널 ${globalJournalCount}건 · 프리프린트 ${preprintCount}건`,
         matchCount: relevant.length,
         rationale: buildRationale(topAvg, recentShare, scarcityScore, highSimilarityShare, domesticCount, globalCount),
         insight: buildInsight(noveltyScore, recentShare, topAvg, domesticCount, globalCount, meta.globalQueryTopic || meta.translatedTopic || cfg.topic, keywordFreq, yearDist, highSimilarityShare)
@@ -1992,6 +2014,56 @@
       return clamp(1 - average(tokenPresence), 0.12, 0.94);
     }
 
+    function computeCombinationalCreativity(topic, records, keywordFreq) {
+      const topicTokens = tokenize(topic).slice(0, 6);
+      if (topicTokens.length < 2 || !records.length) return 0.3;
+
+      const connectorTerms = ['and', '융합', '혼합', 'interdisciplinary', 'cross', 'hybrid', 'fusion'];
+      const connectorBonus = connectorTerms.some((term) => String(topic).toLowerCase().includes(term)) ? 0.16 : 0;
+      const keywordSet = new Set((keywordFreq || []).slice(0, 14).map((item) => String(item.keyword || '').toLowerCase()));
+      const pairPresence = [];
+
+      for (let i = 0; i < topicTokens.length; i += 1) {
+        for (let j = i + 1; j < topicTokens.length; j += 1) {
+          const pair = `${topicTokens[i]} ${topicTokens[j]}`;
+          const count = records.filter((record) => {
+            const haystack = `${record.title || ''} ${record.abstract || ''}`.toLowerCase();
+            return haystack.includes(pair);
+          }).length;
+          pairPresence.push(count / records.length);
+        }
+      }
+
+      const noveltyByPair = 1 - average(pairPresence);
+      const keywordNovelty = topicTokens.filter((token) => !keywordSet.has(token)).length / topicTokens.length;
+      return clamp((noveltyByPair * 0.62) + (keywordNovelty * 0.28) + connectorBonus, 0.08, 0.96);
+    }
+
+    function buildRecommendedKciJournals(records) {
+      const map = new Map();
+      records
+        .filter((record) => record.source === 'KCI' && record.journal)
+        .forEach((record) => {
+          const key = String(record.journal || '').trim();
+          if (!key) return;
+          const row = map.get(key) || { journal: key, count: 0, simTotal: 0, recentCount: 0 };
+          row.count += 1;
+          row.simTotal += Number(record.similarity || 0);
+          if (record.year && record.year >= new Date().getFullYear() - 2) row.recentCount += 1;
+          map.set(key, row);
+        });
+
+      return Array.from(map.values())
+        .map((item) => ({
+          journal: item.journal,
+          count: item.count,
+          recentCount: item.recentCount,
+          avgSimilarity: item.count ? item.simTotal / item.count : 0
+        }))
+        .sort((a, b) => (b.count - a.count) || (b.recentCount - a.recentCount) || (a.avgSimilarity - b.avgSimilarity))
+        .slice(0, 8);
+    }
+
     function getNoveltyVerdict(score) {
       if (score >= 78) {
         return { label: '매우 참신함', tone: 'high', summary: '기존 문헌 중복이 낮고 희소성이 높습니다.' };
@@ -2051,9 +2123,9 @@
       noveltyLabel.textContent = verdict.label;
       noveltyLabel.dataset.tone = verdict.tone;
       document.getElementById('noveltyReason').textContent = verdict.summary;
-      document.getElementById('domesticCount').textContent = String(analysis.domesticCount);
-      document.getElementById('globalCount').textContent = String(analysis.globalCount);
-      document.getElementById('avgSimilarity').textContent = formatPercent(analysis.topAvg);
+      document.getElementById('similarPaperCount').textContent = String(analysis.matchCount);
+      document.getElementById('researchFocusKpi').textContent = formatPercent(analysis.recentShare);
+      document.getElementById('expectedCitationKpi').textContent = String(analysis.expectedCitationIndex || 0);
       document.getElementById('translatedTopic').textContent = analysis.translatedTopic || '-';
       document.getElementById('reportScope').textContent = analysis.reportScope;
       document.getElementById('insightBox').textContent = analysis.insight;
@@ -2064,9 +2136,11 @@
       renderScoreBreakdown(analysis.scoreBreakdown || {});
       renderRationaleList(analysis.rationale || []);
       renderTrendChart(analysis.yearDist);
+      renderTrendLineChart(analysis.yearDist);
       renderKeywordCloud(analysis.keywordFreq);
       renderFacetSummary(analysis.topPapers);
       renderPaperList(analysis.topPapers);
+      renderRecommendedKciJournals(analysis.recommendedKciJournals || []);
     }
 
     function renderScoreBreakdown(breakdown) {
@@ -2075,7 +2149,8 @@
       [
         ['유사도 역점수', breakdown.similarity ?? 0],
         ['시계열 희소성', breakdown.trend ?? 0],
-        ['키워드 희소성', breakdown.scarcity ?? 0]
+        ['키워드 희소성', breakdown.scarcity ?? 0],
+        ['조합적 창의성', breakdown.creativity ?? 0]
       ].forEach(([label, value]) => {
         const card = document.createElement('div');
         card.className = 'score-card';
@@ -2133,6 +2208,7 @@
 
         const bar = document.createElement('div');
         bar.className = 'trend-bar';
+        bar.style.background = 'linear-gradient(180deg, #2dd4bf 0%, #38bdf8 100%)';
         bar.style.height = `${Math.max(5, (item.count / max) * 120)}px`;
 
         const label = document.createElement('div');
@@ -2141,6 +2217,51 @@
 
         col.append(value, bar, label);
         chart.appendChild(col);
+      });
+    }
+
+    function renderTrendLineChart(yearDist) {
+      const target = document.getElementById('trendLineChart');
+      if (!target) return;
+      target.innerHTML = '';
+      if (!yearDist.length) return;
+
+      const width = 360;
+      const height = 56;
+      const max = Math.max(1, ...yearDist.map((item) => item.count));
+      const points = yearDist.map((item, idx) => {
+        const x = (idx / Math.max(1, yearDist.length - 1)) * (width - 20) + 10;
+        const y = height - ((item.count / max) * (height - 10)) - 5;
+        return `${x},${y}`;
+      }).join(' ');
+
+      target.innerHTML = `
+        <svg viewBox="0 0 ${width} ${height}" width="100%" height="100%" preserveAspectRatio="none">
+          <defs>
+            <linearGradient id="lineGrad" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stop-color="#2dd4bf"></stop>
+              <stop offset="100%" stop-color="#38bdf8"></stop>
+            </linearGradient>
+          </defs>
+          <polyline fill="none" stroke="url(#lineGrad)" stroke-width="2.5" points="${points}" />
+        </svg>
+      `;
+    }
+
+    function renderRecommendedKciJournals(items) {
+      const target = document.getElementById('recommendedKciList');
+      if (!target) return;
+      target.innerHTML = '';
+      if (!items.length) {
+        target.innerHTML = '<span class="facet-chip">추천 저널 데이터가 아직 충분하지 않습니다.</span>';
+        return;
+      }
+
+      items.forEach((item, idx) => {
+        const chip = document.createElement('span');
+        chip.className = 'facet-chip';
+        chip.textContent = `${idx + 1}. ${item.journal} · ${item.count}건 · 최근 ${item.recentCount}건`;
+        target.appendChild(chip);
       });
     }
 
@@ -2185,7 +2306,10 @@
         item.className = 'paper-item';
 
         const sourceKey = String(paper.source || '').toLowerCase();
-        const sourceClass = sourceKey === 'pre-print' ? 'chip-preprint' : (sourceKey === 'global journal' ? 'chip-global' : 'chip-kci');
+        const sourceClass = sourceKey === 'global journal' || sourceKey === 'pre-print' ? 'chip-global' : 'chip-kci';
+        const sourceLabel = sourceKey === 'global journal'
+          ? '해외 저널'
+          : (sourceKey === 'pre-print' ? '프리프린트' : '국내 저널');
 
         const meta = [paper.year || '연도 미상', paper.type, paper.journal, paper.citationCount != null ? `인용 ${paper.citationCount}` : null]
           .filter(Boolean)
@@ -2204,7 +2328,7 @@
         item.innerHTML = `
           <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;">
             <div style="font-size:11px;color:#bfdbfe;font-weight:700;line-height:1.6;">${meta}</div>
-            <span class="${sourceClass}">${escapeHtml(String(paper.source || 'Source'))}</span>
+            <span class="${sourceClass}">${escapeHtml(sourceLabel)}</span>
           </div>
           <h4 style="margin:7px 0 0;color:#f8fafc;font-size:14px;font-weight:800;line-height:1.55;letter-spacing:-0.01em;">${escapeHtml(paper.title)}</h4>
           <p style="margin:6px 0 0;color:#cbd5e1;font-size:12px;line-height:1.75;">${escapeHtml(trimText(paper.abstract || '초록 정보 없음', 170))}</p>

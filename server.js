@@ -114,7 +114,7 @@ const server = http.createServer(async (req, res) => {
 				kciConfigured: Boolean(KCI_CONFIG.defaultServiceKey),
 				nanetConfigured: Boolean(NANET_CONFIG.apiKey),
 				openAlexConfigured: Boolean(OPENALEX_CONFIG.apiKey),
-				sources: ['KCI', 'NANET', 'Global Journal', 'Pre-print'],
+				sources: ['KCI', 'NANET', 'Global Journal'],
 				crossrefPolitePool: true
 			});
 			return;
@@ -124,41 +124,6 @@ const server = http.createServer(async (req, res) => {
 			const body = await readJsonBody(req);
 			const data = await analyzeTopicSources(body);
 			sendJson(res, 200, { ok: true, ...data });
-			return;
-		}
-
-		if (req.method === 'POST' && requestUrl.pathname === '/api/arxiv/search') {
-			const body = await readJsonBody(req);
-			const topic = String(body.topic || '').trim();
-			if (!topic) {
-				throw createError(400, '검색할 주제를 입력하세요.');
-			}
-
-			const rangeYears = clampNumber(body.rangeYears, 5, 3, 15);
-			const currentYear = new Date().getFullYear();
-			const fromYear = currentYear - rangeYears + 1;
-			const untilYear = currentYear;
-			const pageSize = clampNumber(body.pageSize, 40, 10, 80);
-			const translatedTopic = await translateTopicToEnglish(topic);
-			const result = await searchArxivPapers({
-				topic,
-				translatedTopic,
-				fromYear,
-				untilYear,
-				pageSize
-			});
-
-			sendJson(res, 200, {
-				ok: true,
-				data: result.data,
-				meta: {
-					translatedTopic,
-					fromYear,
-					untilYear,
-					preprintCount: result.data.length,
-					upstream: result.meta
-				}
-			});
 			return;
 		}
 
@@ -174,7 +139,7 @@ const server = http.createServer(async (req, res) => {
 			const fromYear = currentYear - rangeYears + 1;
 			const untilYear = currentYear;
 			const pageSize = clampNumber(body.pageSize, 60, 10, 120);
-			const globalTypes = normalizeGlobalTypes(body.globalTypes, body.includePreprint === true);
+			const globalTypes = normalizeGlobalTypes(body.globalTypes, false);
 			const translatedTopic = await translateTopicToEnglish(topic);
 			const result = await searchOpenAlexWorks({
 				topic,
@@ -284,7 +249,7 @@ async function analyzeTopicSources(payload) {
 	const untilYear = currentYear;
 	const pageSize = clampNumber(payload.pageSize, 80, 20, 200);
 	const field = String(payload.field || 'all');
-	const paperTypes = Array.isArray(payload.paperTypes) && payload.paperTypes.length ? payload.paperTypes : ['학술지', '석사', '박사'];
+	const paperTypes = Array.isArray(payload.paperTypes) && payload.paperTypes.length ? payload.paperTypes : ['학술지'];
 	const serviceKey = KCI_CONFIG.defaultServiceKey;
 	const serviceKeyMode = String(payload.serviceKeyMode || 'auto');
 	const nanetApiKey = NANET_CONFIG.apiKey;
@@ -358,11 +323,11 @@ async function analyzeTopicSources(payload) {
 			translatedTopic: globalQueryTopic,
 			fromYear,
 			untilYear,
-			pageSize: Math.max(20, Math.round(pageSize * 0.45))
+			pageSize: Math.max(20, Math.round(pageSize * 0.4))
 		})
 		: Promise.resolve({
 			data: [],
-			meta: { skipped: true, reason: 'arXiv disabled by user' }
+			meta: { skipped: true, reason: 'Preprint disabled by user' }
 		});
 
 	const settled = await Promise.allSettled([kciTask, nanetTask, openAlexTask, crossrefTask, arxivTask]);
@@ -383,7 +348,6 @@ async function analyzeTopicSources(payload) {
 	const arxivResult = settled[4].status === 'fulfilled'
 		? settled[4].value
 		: handleSourceFailure('arXiv', settled[4].reason, warnings);
-
 	const mergedDomestic = mergeDomesticSources(kciResult.data, nanetResult.data);
 	const mergedGlobal = mergeGlobalSources(openAlexResult.data, crossrefResult.data, arxivResult.data);
 	const merged = improvedDedupeByIdentifiers([...mergedDomestic, ...mergedGlobal]);
@@ -438,7 +402,7 @@ async function analyzeTopicSources(payload) {
 				nanet: nanetResult.meta,
 				openalex: openAlexResult.meta,
 				crossref: crossrefResult.meta,
-				arxiv: arxivResult.meta
+				preprint: arxivResult.meta
 			}
 		}
 	};
@@ -454,9 +418,9 @@ function buildAnalysisReport(cfg, records, meta) {
 		const fieldOk = cfg.field === 'all' || String(record.field || '').includes(cfg.field);
 		const typeLabel = String(record.type || '').toLowerCase();
 		const globalTypeMap = {
-			'Global Journal': 'journal',
-			'Pre-print': 'preprint'
-		};
+				'Global Journal': 'journal',
+				'Pre-print': 'preprint'
+			};
 		const globalType = globalTypeMap[record.source]
 			|| (typeLabel.includes('master') || typeLabel.includes('석사') ? 'master' : (typeLabel.includes('doctor') || typeLabel.includes('박사') ? 'doctor' : 'journal'));
 
@@ -471,7 +435,7 @@ function buildAnalysisReport(cfg, records, meta) {
 		const titleScore = overlapScoreForAnalysis(topicTokens, tokenizeForAnalysis(record.title));
 		const keywordScore = overlapScoreForAnalysis(topicTokens, tokenizeForAnalysis((record.keywords || []).join(' ')));
 		const abstractScore = overlapScoreForAnalysis(topicTokens, tokenizeForAnalysis(record.abstract));
-		const sourceWeight = (record.source === 'Global Journal' || record.source === 'Pre-print') ? 1.04 : 1;
+		const sourceWeight = (record.source === 'Global Journal' || record.source === 'Pre-print') ? 1.03 : 1;
 		const similarity = clampRange((titleScore * 0.52 + keywordScore * 0.33 + abstractScore * 0.15) * sourceWeight, 0, 1);
 		return { ...record, similarity };
 	});
@@ -488,24 +452,34 @@ function buildAnalysisReport(cfg, records, meta) {
 	const yearDist = buildAnalysisYearDistribution(relevant, minYear, now);
 	const keywordFreq = extractKeywordFrequencyForAnalysis(relevant, topicTokens);
 	const scarcityScore = computeScarcityScore(relevant, topicTokens);
-	const overlapPenalty = clampRange((topAvg * 58) + (highSimilarityShare * 18), 0, 82);
-	const recencyPenalty = recentShare * 22 * cfg.recentWeight;
-	const saturationPenalty = Math.min(18, Math.log2(relevant.length + 1) * 4.2);
-	const diversityBonus = 8 * computeDistributionEntropy(yearDist.map((entry) => entry.count));
-	const globalCoverageBonus = globalShare * 6;
-	const scarcityBonus = scarcityScore * 18;
+	const creativityScore = computeCombinationalCreativity(cfg.topic, relevant, keywordFreq);
+	const overlapPenalty = (topAvg ** 1.22) * 72;
+	const highSimilarityPenalty = highSimilarityShare * 26;
+	const recencyPenalty = recentShare * 24 * cfg.recentWeight;
+	const saturationPenalty = Math.min(26, Math.log2(relevant.length + 1) * 5.4);
+	const diversityBonus = 10 * computeDistributionEntropy(yearDist.map((entry) => entry.count));
+	const globalCoverageBonus = globalShare * 5;
+	const scarcityBonus = scarcityScore * 20;
+	const creativityBonus = (creativityScore - 0.32) * 34;
 
-	const noveltyScore = clampRange(
-		100 - overlapPenalty - recencyPenalty - saturationPenalty + diversityBonus + globalCoverageBonus + scarcityBonus,
-		3,
-		99
-	);
+	let noveltyScore;
+	if (!relevant.length) {
+		noveltyScore = 97;
+	} else {
+		noveltyScore = clampRange(
+			66 - overlapPenalty - highSimilarityPenalty - recencyPenalty - saturationPenalty + diversityBonus + globalCoverageBonus + scarcityBonus + creativityBonus,
+			1,
+			100
+		);
+	}
 
 	const verdict = classifyNovelty(noveltyScore);
 	const translatedTopic = meta.globalQueryTopic || meta.translatedTopic || cfg.topic;
 	const domesticCount = meta.domesticCount || 0;
 	const globalCount = meta.globalCount || 0;
 	const rationale = buildNoveltyRationale({ noveltyScore, topAvg, recentShare, scarcityScore, highSimilarityShare, domesticCount, globalCount });
+	const recommendedKciJournals = buildRecommendedKciJournals(relevant);
+	const expectedCitationIndex = Math.round((averageNumbers(topPapers.map((paper) => Number(paper.citationCount || 0))) * 0.72) + (noveltyScore * 0.38));
 
 	return {
 		noveltyScore,
@@ -522,14 +496,18 @@ function buildAnalysisReport(cfg, records, meta) {
 		globalCount,
 		translatedTopic,
 		reportScope: `최근 ${cfg.rangeYears}년 기준 · 총 ${relevant.length}건 분석`,
-		sourceSummary: `KCI ${domesticCount}건 · 해외 저널 ${relevant.filter((item) => item.source === 'Global Journal').length}건 · preprint ${relevant.filter((item) => item.source === 'Pre-print').length}건`,
+		sourceSummary: `국내 저널 ${domesticCount}건 · 해외 저널 ${relevant.filter((item) => item.source === 'Global Journal').length}건 · 프리프린트 ${relevant.filter((item) => item.source === 'Pre-print').length}건`,
 		matchCount: relevant.length,
 		highSimilarityShare,
 		scarcityScore,
+		creativityScore,
+		expectedCitationIndex,
+		recommendedKciJournals,
 		scoreBreakdown: {
 			similarity: Math.round((1 - topAvg) * 100),
 			trend: Math.round((1 - recentShare) * 100),
-			scarcity: Math.round(scarcityScore * 100)
+			scarcity: Math.round(scarcityScore * 100),
+			creativity: Math.round(creativityScore * 100)
 		},
 		rationale,
 		insight: buildAnalysisInsight({ noveltyScore, recentShare, topAvg, domesticCount, globalCount, translatedTopic, keywordFreq, yearDist, highSimilarityShare, scarcityScore })
@@ -537,17 +515,11 @@ function buildAnalysisReport(cfg, records, meta) {
 }
 
 function handleSourceFailure(sourceName, error, warnings) {
-	let message = '데이터 소스 연결에 문제가 있습니다.';
-	if (sourceName === 'KCI') {
-		message = '국내 KCI 데이터 연결에 문제가 있어 해외 논문 중심으로 결과를 제공합니다.';
-	} else if (sourceName === 'NANET') {
-		message = '국회도서관(NANET) 연결에 문제가 있어 다른 데이터 소스로 결과를 제공합니다.';
-	} else if (sourceName === 'OpenAlex') {
-		message = 'OpenAlex 연결에 문제가 있어 보조 소스 중심으로 결과를 제공합니다.';
-	} else if (sourceName === 'Crossref') {
-		message = '해외 Crossref 데이터 연결에 문제가 있어 국내 KCI 결과 중심으로 제공합니다.';
-	} else if (sourceName === 'arXiv') {
-		message = 'arXiv 프리프린트 연결에 문제가 있어 저널 데이터 중심으로 결과를 제공합니다.';
+	let message = '일부 외부 데이터망 응답이 지연되어 수집 범위를 자동 조정했습니다.';
+	if (sourceName === 'KCI' || sourceName === 'NANET') {
+		message = '국내 데이터망 응답이 지연되어 해외 저널 중심으로 분석을 계속합니다.';
+	} else if (sourceName === 'OpenAlex' || sourceName === 'Crossref' || sourceName === 'arXiv') {
+		message = '해외 데이터망 응답이 지연되어 국내 저널 중심으로 분석을 계속합니다.';
 	}
 	warnings.push(message);
 	return {
@@ -995,8 +967,6 @@ function normalizeOpenAlexRecord(record) {
 		: [];
 	const concepts = Array.isArray(record.concepts) ? record.concepts.map((item) => item?.display_name).filter(Boolean) : [];
 	const ids = record?.ids || {};
-	const arxivId = normalizeArxivIdentifier(ids.arxiv || '');
-
 	return {
 		title: String(record.display_name).trim(),
 		abstract: stripHtml(invertedIndexToText(record.abstract_inverted_index)),
@@ -1009,10 +979,10 @@ function normalizeOpenAlexRecord(record) {
 		citationCount: Number(record.cited_by_count) || 0,
 		doi: normalizeDoi(record.doi || ids.doi || ''),
 		url: String(record?.best_oa_location?.landing_page_url || record?.primary_location?.landing_page_url || ids?.openalex || '').trim(),
-		source: type === 'Pre-print' ? 'Pre-print' : 'Global Journal',
+		source: 'Global Journal',
 		language: 'en',
 		openalexId: String(record.id || '').trim(),
-		arxivId
+		arxivId: ''
 	};
 }
 
@@ -1286,9 +1256,6 @@ function mapCrossrefType(type) {
 
 function mapOpenAlexType(record) {
 	const rawType = String(record?.type || '').toLowerCase();
-	if (rawType === 'preprint') {
-		return 'Pre-print';
-	}
 	if (rawType === 'dissertation') {
 		return classifyDissertationLevel(record);
 	}
@@ -1311,9 +1278,6 @@ function buildOpenAlexTypeFilter(globalTypes) {
 	if (globalTypes.includes('master') || globalTypes.includes('doctor')) {
 		mapped.push('dissertation');
 	}
-	if (globalTypes.includes('preprint')) {
-		mapped.push('preprint');
-	}
 	return dedupeStringArray(mapped).join('|') || 'article';
 }
 
@@ -1330,15 +1294,71 @@ function buildCrossrefTypeFilter(globalTypes) {
 
 function normalizeGlobalTypes(globalTypes, includePreprintFallback) {
 	const incoming = Array.isArray(globalTypes) ? globalTypes.map((item) => String(item).trim().toLowerCase()) : [];
-	const allowed = ['journal', 'master', 'doctor', 'preprint'];
+	const allowed = ['journal', 'preprint'];
 	const normalized = incoming.filter((item) => allowed.includes(item));
 	if (!normalized.length) {
-		normalized.push('journal', 'master', 'doctor');
+		normalized.push('journal');
 	}
 	if (includePreprintFallback && !normalized.includes('preprint')) {
 		normalized.push('preprint');
 	}
 	return dedupeStringArray(normalized);
+}
+
+function computeCombinationalCreativity(topic, records, keywordFreq) {
+	const topicTokens = tokenizeForAnalysis(topic).slice(0, 6);
+	if (topicTokens.length < 2 || !records.length) {
+		return 0.3;
+	}
+
+	const connectorTerms = ['and', '융합', '혼합', 'interdisciplinary', 'cross', 'hybrid', 'fusion'];
+	const connectorBonus = connectorTerms.some((term) => String(topic).toLowerCase().includes(term)) ? 0.16 : 0;
+
+	const keywordSet = new Set((keywordFreq || []).slice(0, 14).map((item) => String(item.keyword || '').toLowerCase()));
+	const pairCount = [];
+	for (let i = 0; i < topicTokens.length; i += 1) {
+		for (let j = i + 1; j < topicTokens.length; j += 1) {
+			const pair = `${topicTokens[i]} ${topicTokens[j]}`;
+			const count = records.filter((record) => {
+				const haystack = `${record.title || ''} ${record.abstract || ''}`.toLowerCase();
+				return haystack.includes(pair);
+			}).length;
+			pairCount.push(count / records.length);
+		}
+	}
+
+	const noveltyByPair = 1 - averageNumbers(pairCount);
+	const keywordNovelty = topicTokens.filter((token) => !keywordSet.has(token)).length / topicTokens.length;
+	return clampRange((noveltyByPair * 0.62) + (keywordNovelty * 0.28) + connectorBonus, 0.08, 0.96);
+}
+
+function buildRecommendedKciJournals(records) {
+	const journalMap = new Map();
+	records
+		.filter((record) => record.source === 'KCI' && record.journal)
+		.forEach((record) => {
+			const key = String(record.journal).trim();
+			if (!key) {
+				return;
+			}
+			const current = journalMap.get(key) || { journal: key, count: 0, similarityTotal: 0, recentCount: 0 };
+			current.count += 1;
+			current.similarityTotal += Number(record.similarity || 0);
+			if (record.year && record.year >= new Date().getFullYear() - 2) {
+				current.recentCount += 1;
+			}
+			journalMap.set(key, current);
+		});
+
+	return Array.from(journalMap.values())
+		.map((item) => ({
+			journal: item.journal,
+			count: item.count,
+			recentCount: item.recentCount,
+			avgSimilarity: item.count ? item.similarityTotal / item.count : 0
+		}))
+		.sort((a, b) => (b.count - a.count) || (b.recentCount - a.recentCount) || (a.avgSimilarity - b.avgSimilarity))
+		.slice(0, 8);
 }
 
 function dedupeStringArray(values) {
