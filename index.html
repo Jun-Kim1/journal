@@ -6,6 +6,11 @@
   <title>Research Novelty Dashboard</title>
   <meta http-equiv="refresh" content="0; url=./journal.html">
   <script>
+    window.__API_BASE__ = 'https://your-render-app.onrender.com';
+    const configuredApiBase = String(window.__API_BASE__ || '').trim().replace(/\/+$/, '');
+    if (configuredApiBase && !/your-render-app/i.test(configuredApiBase) && window.localStorage) {
+      window.localStorage.setItem('apiBase', configuredApiBase);
+    }
     window.location.replace('./journal.html');
   </script>
 </head>

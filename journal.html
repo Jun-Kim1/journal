@@ -785,6 +785,30 @@
       font-weight: 600;
     }
 
+    .spinup-hint {
+      margin: 8px auto 0;
+      min-height: 18px;
+      font-size: 12px;
+      color: #c7f2ff;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      opacity: 0;
+      transform: translateY(4px);
+      transition: opacity .42s ease, transform .42s ease;
+      text-shadow: 0 0 0 rgba(103, 232, 249, 0);
+    }
+
+    .spinup-hint.show {
+      opacity: 1;
+      transform: translateY(0);
+      animation: spinupGlow 1.8s ease-in-out infinite;
+    }
+
+    @keyframes spinupGlow {
+      0%, 100% { text-shadow: 0 0 0 rgba(103, 232, 249, 0); }
+      50% { text-shadow: 0 0 10px rgba(103, 232, 249, 0.5), 0 0 18px rgba(59, 130, 246, 0.24); }
+    }
+
     .progress-track {
       margin-top: 18px;
       width: min(520px, 80vw);
@@ -1346,6 +1370,7 @@
           <h2 class="loading-title">분석 중</h2>
           <div id="loadingSubMessage" class="loading-sub">학술 키워드 다국어 변환 중...</div>
           <p id="loadingMessage" class="muted" style="margin-top:6px;">국문 주제를 글로벌 학술 검색어로 정규화하고 있습니다.</p>
+          <p id="spinupWarmupMessage" class="spinup-hint" aria-live="polite">정밀 분석을 위해 전용 컴퓨팅 엔진을 예열하고 있습니다.</p>
           <div class="progress-track"><div id="loadingBar" class="progress-fill"></div></div>
           <div class="loading-steps">
             <div id="step1" class="active">1. 학술 키워드 다국어 변환 중...</div>
@@ -1454,7 +1479,11 @@
   </div>
 
   <script>
-    const APP_CONFIG = { analyzeEndpoint: '/api/analyze', healthEndpoint: '/health' };
+    const RUNTIME_API_BASE = resolveApiBase();
+    const APP_CONFIG = {
+      analyzeEndpoint: `${RUNTIME_API_BASE || ''}/api/analyze`,
+      healthEndpoint: `${RUNTIME_API_BASE || ''}/health`
+    };
 
     const form = document.getElementById('analyzer-form');
     // searchShell removed in redesign
@@ -1469,9 +1498,37 @@
     const globalTypeGroup = document.getElementById('globalTypeGroup');
     const loadingMessage = document.getElementById('loadingMessage');
     const loadingSubMessage = document.getElementById('loadingSubMessage');
+    const spinupWarmupMessage = document.getElementById('spinupWarmupMessage');
     const loadingBar = document.getElementById('loadingBar');
     const resultSortOrder = document.getElementById('resultSortOrder');
     const queryLengthHint = document.getElementById('queryLengthHint');
+
+    function isGitHubPagesHost() {
+      return /github\.io$/i.test(window.location.hostname || '');
+    }
+
+    function resolveApiBase() {
+      const fromQuery = new URLSearchParams(window.location.search).get('apiBase');
+      const fromGlobal = (window.__API_BASE__ || '').trim();
+      const fromStorage = (window.localStorage && window.localStorage.getItem('apiBase')) || '';
+      const fromMetaTag = document.querySelector('meta[name="api-base"]')
+        ? (document.querySelector('meta[name="api-base"]').getAttribute('content') || '')
+        : '';
+
+      const selected = [fromQuery, fromGlobal, fromStorage, fromMetaTag]
+        .map((value) => String(value || '').trim())
+        .find((value) => value.length > 0) || '';
+
+      if (!selected) {
+        return '';
+      }
+
+      const normalized = selected.replace(/\/+$/, '');
+      if (window.localStorage) {
+        window.localStorage.setItem('apiBase', normalized);
+      }
+      return normalized;
+    }
 
     const loadingStages = [
       {
@@ -1513,6 +1570,9 @@
     let latestAnalysis = null;
     let loadingIndex = 0;
     let loadingProgress = 10;
+    let spinupDelayTimer = null;
+    let spinupRampTimer = null;
+    let isSpinupHintVisible = false;
 
     form.topic.addEventListener('input', () => {
       const text = (form.topic.value || '').trim();
@@ -1621,23 +1681,73 @@
     function setLoadingState(loading) {
       analyzeButton.disabled = loading;
       if (loading) {
+        stopSpinupWatch();
         loadingIndex = 0;
-        loadingProgress = 10;
+        loadingProgress = 2;
+        isSpinupHintVisible = false;
+        if (spinupWarmupMessage) {
+          spinupWarmupMessage.classList.remove('show');
+        }
         setLoadingStep(loadingIndex, loadingProgress);
+        startSpinupWatch();
         loadingTimer = setInterval(() => {
           loadingIndex = Math.min(loadingStages.length - 2, loadingIndex + 1);
-          loadingProgress = Math.min(86, loadingProgress + 17);
+          if (!isSpinupHintVisible) {
+            loadingProgress = Math.min(44, loadingProgress + 8);
+          }
           setLoadingStep(loadingIndex, loadingProgress);
-        }, 1200);
+        }, 1300);
       } else if (loadingTimer) {
         clearInterval(loadingTimer);
         loadingTimer = null;
+        stopSpinupWatch();
       }
     }
 
     async function completeLoadingState() {
+      stopSpinupWatch();
       setLoadingStep(loadingStages.length - 1, 100);
       await new Promise((resolve) => window.setTimeout(resolve, 260));
+    }
+
+    function startSpinupWatch() {
+      spinupDelayTimer = window.setTimeout(() => {
+        if (!analyzeButton.disabled) {
+          return;
+        }
+        isSpinupHintVisible = true;
+        if (spinupWarmupMessage) {
+          spinupWarmupMessage.classList.add('show');
+        }
+
+        spinupRampTimer = window.setInterval(() => {
+          if (!analyzeButton.disabled) {
+            return;
+          }
+          if (loadingProgress < 60) {
+            loadingProgress = Math.min(60, loadingProgress + 1);
+            setLoadingStep(loadingIndex, loadingProgress);
+          } else if (spinupRampTimer) {
+            clearInterval(spinupRampTimer);
+            spinupRampTimer = null;
+          }
+        }, 320);
+      }, 3000);
+    }
+
+    function stopSpinupWatch() {
+      if (spinupDelayTimer) {
+        clearTimeout(spinupDelayTimer);
+        spinupDelayTimer = null;
+      }
+      if (spinupRampTimer) {
+        clearInterval(spinupRampTimer);
+        spinupRampTimer = null;
+      }
+      isSpinupHintVisible = false;
+      if (spinupWarmupMessage) {
+        spinupWarmupMessage.classList.remove('show');
+      }
     }
 
     function setLoadingStep(index, progressPercent) {
@@ -1676,9 +1786,13 @@
 
     async function fetchData(config) {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 45000);
+      const timeout = setTimeout(() => controller.abort(), 60000);
 
       try {
+        if (isGitHubPagesHost() && !RUNTIME_API_BASE) {
+          throw new Error('GitHub Pages는 정적 호스팅이라 /api/analyze를 처리하지 못합니다. Render URL로 접속하거나, URL 뒤에 ?apiBase=https://{your-render-app}.onrender.com 을 추가해주세요.');
+        }
+
         const res = await fetch(APP_CONFIG.analyzeEndpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -1687,6 +1801,9 @@
         });
         const body = await res.json().catch(() => ({}));
         if (!res.ok || !body.ok) {
+          if ((res.status === 404 || res.status === 405) && isGitHubPagesHost()) {
+            throw new Error('현재 도메인에서는 분석 API를 제공하지 않습니다. Render 서버 URL로 접속하거나 ?apiBase=https://{your-render-app}.onrender.com 을 붙여주세요.');
+          }
           throw new Error(body.error || '데이터를 가져오지 못했습니다. 잠시 후 다시 시도해주세요.');
         }
         return body;
