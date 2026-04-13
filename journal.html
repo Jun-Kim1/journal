@@ -1,0 +1,2143 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Original.</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@200..800&family=Pretendard:wght@400;500;600;700&display=swap');
+
+    :root {
+      --base: #0b0b0d;
+      --surface: #111114;
+      --bg-card: #111114;
+      --text-primary: #f5f5f7;
+      --text-secondary: rgba(255,255,255,0.62);
+      --text-muted: rgba(255,255,255,0.26);
+      --text-hint: rgba(255,255,255,0.15);
+      --indigo-400: #818cf8;
+      --violet-400: #a78bfa;
+      --purple-400: #c084fc;
+      --border-base: rgba(255,255,255,0.07);
+      --border-active: rgba(99,102,241,0.3);
+      --border-focus: rgba(139,92,246,0.65);
+      --text: #f5f5f7;
+      --muted: rgba(255,255,255,0.62);
+      --glass: rgba(17, 17, 20, 0.86);
+      --accent: #818cf8;
+      --point: #ff4d4d;
+      --ink: #070707;
+      --panel-edge: rgba(255, 255, 255, 0.11);
+    }
+
+    * { box-sizing: border-box; }
+
+    a, button, label, input, select {
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      font-family: 'Pretendard', 'Manrope', sans-serif;
+      color: var(--text);
+      background: var(--base);
+      background-attachment: fixed;
+    }
+
+    .page {
+      display: none;
+      animation: floatIn 0.8s cubic-bezier(.19, 1, .22, 1);
+    }
+
+    .page.active {
+      display: block;
+    }
+
+    @keyframes floatIn {
+      from { opacity: 0; transform: translateY(28px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .wrap {
+      width: min(1200px, 96vw);
+      margin: 0 auto;
+      padding: 34px 10px 34px;
+    }
+
+    #search-page.page.active {
+      display: flex;
+      flex-direction: column;
+      min-height: calc(100vh - 68px);
+    }
+
+    .brand {
+      text-align: left;
+      margin: 0 0 72px;
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      padding: 0 4px;
+    }
+
+    .brand-name {
+      font-family: 'Manrope', 'Pretendard', sans-serif;
+      font-size: clamp(1.28rem, 1.9vw, 1.85rem);
+      letter-spacing: -0.02em;
+      font-weight: 900;
+      display: inline-flex;
+      align-items: baseline;
+      gap: 0;
+    }
+
+    .brand-primary {
+      color: #f5f6f8;
+      animation: brandFloat 3.2s ease-in-out infinite;
+    }
+
+    .brand-dot {
+      color: var(--point);
+      animation: brandPulse 1.6s ease-in-out infinite;
+    }
+
+    @keyframes brandFloat {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-1px); }
+    }
+
+    @keyframes brandPulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: .72; }
+    }
+
+    .brand-sub {
+      font-size: 12px;
+      color: rgba(255,255,255,0.32);
+      font-weight: 600;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+
+    .hero {
+      margin: 0 0 92px;
+      display: grid;
+      grid-template-columns: minmax(420px, 1.15fr) minmax(340px, 0.85fr);
+      gap: 42px;
+      align-items: start;
+    }
+
+    .hero-left {
+      display: none;
+    }
+
+    .hero-title {
+      font-family: 'Pretendard', sans-serif;
+      font-size: clamp(36px, 4.2vw, 50px);
+      font-weight: 500;
+      color: rgba(255,255,255,0.27);
+      margin: 0;
+      letter-spacing: -0.02em;
+      line-height: 1.12;
+    }
+
+    .hero-title .highlight {
+      background: linear-gradient(120deg, #818cf8, #a78bfa, #c084fc);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      display: inline-block;
+      font-size: 1.22em;
+      font-weight: 800;
+      line-height: 0.98;
+      text-shadow: 0 0 8px rgba(167, 139, 250, 0.26), 0 0 16px rgba(129, 140, 248, 0.12);
+    }
+
+    .hero-title-section {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+
+    .hero-steps {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 18px;
+      width: 100%;
+      padding-top: 8px;
+    }
+
+    .hero-step {
+      display: grid;
+      grid-template-columns: 48px 1fr;
+      align-items: start;
+      gap: 18px;
+      min-width: 0;
+      padding-bottom: 14px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .hero-step:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+
+    .step-badge {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .step-num {
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      color: currentColor;
+    }
+
+    .step-content {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .hero-step:nth-child(1) { color: #818cf8; }
+    .hero-step:nth-child(2) { color: #a78bfa; }
+    .hero-step:nth-child(3) { color: #c084fc; }
+
+    .step-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #f5f5f7;
+    }
+
+    .step-desc {
+      font-size: 11px;
+      color: rgba(255,255,255,0.46);
+      line-height: 1.45;
+    }
+
+    .search-form-wrap {
+      width: min(88vw, 1000px);
+      max-width: 1000px;
+      margin: 0 auto 92px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .search-row {
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      width: 100%;
+    }
+
+    .search-field {
+      flex: 1;
+      position: relative;
+      background: #0d0d12;
+      backdrop-filter: blur(12px);
+      border: 1px solid #2e2e3e;
+      border-radius: 9999px;
+      display: flex;
+      align-items: center;
+      padding: 0 8px 0 22px;
+      transition: all .2s ease;
+      height: 72px;
+      box-shadow: 0 8px 18px rgba(6, 7, 12, 0.28);
+      width: 100%;
+    }
+
+    .search-field:focus-within {
+      border-color: rgba(129, 140, 248, 0.65);
+      background: #11111a;
+    }
+
+    .search-field > svg {
+      position: absolute;
+      left: 20px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #848bcf;
+      opacity: 0.9;
+      pointer-events: none;
+      transition: opacity .2s ease;
+      width: 18px;
+      height: 18px;
+    }
+
+    .search-field:focus-within > svg {
+      opacity: 0.85;
+    }
+
+    #topic {
+      width: 100%;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      color: #d9dced;
+      font-size: 16px;
+      font-weight: 500;
+      font-family: 'Pretendard', sans-serif;
+      min-height: auto;
+      resize: none;
+      line-height: 72px;
+      padding: 0 20px 0 42px;
+      height: 72px;
+      align-self: center;
+      overflow: hidden;
+    }
+
+    #topic::placeholder { color: rgba(181, 187, 222, 0.68); }
+    #topic { caret-color: #a78bfa; }
+
+    #analyzeButton {
+      border: 0;
+      outline: 0;
+      padding: 0 20px;
+      border-radius: 14px;
+      background: linear-gradient(90deg, #818cf8, #a78bfa);
+      color: #111320;
+      font-weight: 700;
+      font-size: 13px;
+      font-family: 'Pretendard', sans-serif;
+      cursor: pointer;
+      box-shadow: 0 4px 10px rgba(129, 140, 248, 0.34);
+      transition: all 0.18s ease;
+      height: 60px;
+      white-space: nowrap;
+      flex: 0 0 auto;
+    }
+
+    #analyzeButton:hover { opacity: 0.9; }
+    #analyzeButton:active { transform: scale(0.985); }
+    #analyzeButton:disabled { opacity: 0.55; cursor: not-allowed; }
+
+    .security-note {
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 8px;
+      margin-top: auto;
+      margin-bottom: 6px;
+      color: rgba(255,255,255,0.45);
+      font-size: 11px;
+      font-weight: 500;
+      background: transparent;
+      border: none;
+      border-radius: 0;
+      padding: 44px 10px 0;
+    }
+
+    .security-note svg {
+      flex: 0 0 14px;
+      color: #4ade80;
+      opacity: 0.6;
+      width: 14px;
+      height: 14px;
+    }
+
+    .search-meta {
+      display: flex;
+      justify-content: flex-start;
+      gap: 12px;
+      align-items: center;
+      color: rgba(255,255,255,0.4);
+      font-size: 11px;
+      font-weight: 500;
+      margin: 0 0 2px 0;
+      letter-spacing: .02em;
+      padding-left: 4px;
+      opacity: 0.6;
+    }
+
+    .process-steps {
+      display: none;
+    }
+
+    .ps-step {
+      display: none;
+    }
+
+    .scope-area {
+      display: grid;
+      gap: 24px;
+      margin-top: 0;
+      max-width: 1200px;
+      margin-left: auto;
+      margin-right: auto;
+      grid-template-columns: 1fr 1fr;
+      align-items: stretch;
+      padding: 0;
+    }
+
+    .scope-card {
+      border-radius: 20px;
+      padding: 34px 34px 32px;
+      background: rgba(20, 20, 24, 0.8);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(139, 92, 246, 0.2);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      min-height: 332px;
+    }
+
+    .scope-pair {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: start;
+    }
+
+    .scope-divider {
+      width: 1px;
+      background: rgba(255, 255, 255, 0.07);
+      align-self: stretch;
+      margin: 0 20px;
+    }
+
+    .scope-group {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .scope-parent-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      cursor: pointer;
+      padding: 12px 0;
+      border-bottom: 1px solid rgba(139, 92, 246, 0.15);
+      user-select: none;
+    }
+
+    .scope-kci-g .scope-parent-row { border-bottom-color: rgba(129, 140, 248, 0.3); }
+    .scope-global-g .scope-parent-row { border-bottom-color: rgba(99, 102, 241, 0.3); }
+
+    .scope-parent-row input { display: none; }
+
+    .scope-parent-check {
+      width: 18px;
+      height: 18px;
+      border-radius: 4px;
+      border: 2px solid rgba(129, 140, 248, 0.4);
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      color: #fff;
+      font-weight: 700;
+      transition: all .15s ease;
+      background: transparent;
+    }
+
+    .scope-kci-g .scope-parent-row:has(input:checked) .scope-parent-check {
+      background: #818cf8;
+      border-color: #818cf8;
+      color: #0b0b0d;
+    }
+    .scope-kci-g .scope-parent-row:has(input:checked) .scope-parent-check::after { content: '✓'; }
+
+    .scope-global-g .scope-parent-row:has(input:checked) .scope-parent-check {
+      background: #6366f1;
+      border-color: #6366f1;
+      color: #fff;
+    }
+    .scope-global-g .scope-parent-row:has(input:checked) .scope-parent-check::after { content: '✓'; }
+
+    .scope-parent-name {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--muted);
+      transition: color .15s ease;
+    }
+
+    .scope-parent-name em { display: none; }
+
+    .scope-parent-row:has(input:checked) .scope-parent-name { color: var(--text); }
+
+    .scope-children {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 9px;
+      margin-top: 12px;
+      justify-content: flex-start;
+    }
+
+    .scope-child {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      white-space: nowrap;
+      padding: 7px 14px;
+      min-height: 40px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.58);
+      transition: all .15s ease;
+      user-select: none;
+      line-height: 1.1;
+      writing-mode: horizontal-tb;
+      word-break: keep-all;
+    }
+
+    .scope-child input { display: none; }
+
+    .scope-child:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: rgba(255, 255, 255, 0.76);
+    }
+
+    .scope-kci-g .scope-child:has(input:checked) {
+      background: rgba(34, 211, 238, 0.23);
+      border-color: rgba(34, 211, 238, 0.68);
+      color: #dcfeff;
+      box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.26) inset;
+    }
+
+    .scope-global-g .scope-child:has(input:checked) {
+      background: rgba(99, 102, 241, 0.26);
+      border-color: rgba(129, 140, 248, 0.74);
+      color: #e0e7ff;
+      box-shadow: 0 0 0 1px rgba(129, 140, 248, 0.22) inset;
+    }
+
+    .scope-title {
+      font-family: 'Manrope', sans-serif;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #4e5562;
+    }
+
+    .scope-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      color: rgba(255,255,255,0.5);
+      margin-bottom: 16px;
+    }
+
+    .options-card {
+      margin-top: 0;
+      border-radius: 20px;
+      padding: 34px;
+      background: rgba(20, 20, 24, 0.8);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(139, 92, 246, 0.2);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+      min-height: 332px;
+    }
+
+    .options-title {
+      font-family: 'Pretendard', sans-serif;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.5);
+      margin: 0 0 16px;
+    }
+
+    .options-grid {
+      margin-top: 16px;
+      display: grid;
+      gap: 22px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .field {
+      display: grid;
+      gap: 10px;
+    }
+
+    .field-label {
+      font-size: 12px;
+      color: #b6bcc9;
+      font-weight: 700;
+      letter-spacing: .02em;
+      display: flex;
+      align-items: center;
+    }
+
+    .hint {
+      margin-left: 6px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 800;
+      color: #64748b;
+      background: rgba(255,255,255,0.7);
+      cursor: help;
+    }
+
+    select {
+      appearance: none;
+      border: 0;
+      outline: 0;
+      border-radius: 12px;
+      padding: 14px 40px 14px 14px;
+      color: #e6e9f2;
+      font-size: 14px;
+      font-weight: 600;
+      background-color: rgba(26, 26, 29, 0.95);
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' fill='%2364748b' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14L2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 14px center;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+    }
+
+    .result-facets {
+      margin-bottom: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .facet-chip {
+      padding: 5px 9px;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.26);
+      background: rgba(15, 23, 42, 0.55);
+      color: #cbd5e1;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .reason-strip {
+      margin-top: 12px;
+      font-size: 11px;
+      color: #93c5fd;
+      border-top: 1px dashed rgba(148, 163, 184, 0.28);
+      padding-top: 8px;
+    }
+
+    .loading-skeleton {
+      margin-top: 14px;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .loading-skeleton div {
+      height: 10px;
+      border-radius: 999px;
+      background: rgba(69, 96, 150, 0.72);
+      animation: shimmer 1.5s linear infinite;
+    }
+
+    @keyframes shimmer {
+      from { background-position: 200% 0; }
+      to { background-position: -20% 0; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+        scroll-behavior: auto !important;
+      }
+
+      .loading-shell,
+      .result-shell,
+      .scope-card,
+      details,
+      .bento-card,
+      .search-shell {
+        backdrop-filter: none !important;
+      }
+    }
+
+    #errorBox {
+      display: none;
+      margin-top: 20px;
+      border-radius: 16px;
+      padding: 12px 14px;
+      background: rgba(248, 113, 113, 0.12);
+      color: #b91c1c;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    #errorBox.show { display: block; }
+
+    .loading-shell,
+    .result-shell {
+      border-radius: 34px;
+      background: #0d1835;
+      box-shadow: 0 30px 90px rgba(2, 8, 23, 0.5), inset 0 1px 0 rgba(148, 163, 184, 0.2);
+      padding: 34px;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      color: #dbeafe;
+    }
+
+    .loading-shell {
+      min-height: 75vh;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .loading-shell::before,
+    .loading-shell::after {
+      content: '';
+      position: absolute;
+      border-radius: 999px;
+      filter: blur(30px);
+      opacity: 0.45;
+      pointer-events: none;
+    }
+
+    .loading-shell::before {
+      width: 340px;
+      height: 340px;
+      left: -80px;
+      top: -120px;
+      background: rgba(61, 219, 217, 0.4);
+    }
+
+    .loading-shell::after {
+      width: 320px;
+      height: 320px;
+      right: -100px;
+      bottom: -120px;
+      background: rgba(124, 107, 255, 0.38);
+    }
+
+    .loading-core {
+      position: relative;
+      z-index: 2;
+      width: min(620px, 92vw);
+      padding: 18px;
+      border-radius: 24px;
+      background: rgba(15, 23, 42, 0.38);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(148, 163, 184, 0.24);
+    }
+
+    .loading-dot {
+      width: 86px;
+      height: 86px;
+      border-radius: 50%;
+      background: #7c6bff;
+      box-shadow: 0 14px 34px rgba(61, 219, 217, 0.26), 0 0 55px rgba(124, 107, 255, 0.34);
+      animation: breath 1.9s ease-in-out infinite;
+      margin: 0 auto 20px;
+      position: relative;
+    }
+
+    .loading-dot::before,
+    .loading-dot::after {
+      content: '';
+      position: absolute;
+      inset: -10px;
+      border-radius: 50%;
+      border: 1px solid rgba(125, 211, 252, 0.35);
+      animation: ringPulse 2.4s ease-out infinite;
+    }
+
+    .loading-dot::after {
+      inset: -22px;
+      border-color: rgba(129, 140, 248, 0.35);
+      animation-delay: .45s;
+    }
+
+    @keyframes breath {
+      0%,100% { transform: scale(0.92); opacity: 0.7; }
+      50% { transform: scale(1.05); opacity: 1; }
+    }
+
+    @keyframes ringPulse {
+      0% { transform: scale(0.88); opacity: .65; }
+      100% { transform: scale(1.12); opacity: 0; }
+    }
+
+    .loading-title {
+      margin: 0;
+      font-family: 'Manrope', sans-serif;
+      color: #f8fafc;
+      letter-spacing: -0.02em;
+      font-size: clamp(1.3rem, 3.2vw, 1.9rem);
+    }
+
+    .loading-sub {
+      margin: 8px auto 0;
+      font-size: 12px;
+      color: #a5b4fc;
+      font-weight: 600;
+    }
+
+    .progress-track {
+      margin-top: 18px;
+      width: min(520px, 80vw);
+      height: 9px;
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.55);
+      overflow: hidden;
+      border: 1px solid rgba(148, 163, 184, 0.3);
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #4e8ef7 0%, #38bdf8 52%, #67e8f9 100%);
+      width: 12%;
+      transition: width .55s ease, box-shadow .4s ease;
+      box-shadow: 0 8px 20px rgba(61, 219, 217, 0.36);
+    }
+
+    .loading-steps {
+      margin-top: 24px;
+      display: grid;
+      gap: 9px;
+      text-align: left;
+      color: #94a3b8;
+      font-size: 13px;
+      width: min(560px, 84vw);
+    }
+
+    .loading-steps > div {
+      border-radius: 10px;
+      padding: 9px 11px;
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      background: rgba(15, 23, 42, 0.4);
+      opacity: 0.48;
+      transform: translateY(6px);
+      transition: opacity .35s ease, transform .35s ease, border-color .35s ease, background-color .35s ease;
+    }
+
+    .loading-steps .active {
+      color: #e0f2fe;
+      font-weight: 700;
+      border-color: rgba(34, 211, 238, 0.5);
+      background: rgba(8, 47, 73, 0.55);
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .loading-steps .done {
+      opacity: 0.82;
+      transform: translateY(0);
+    }
+
+    .result-shell .muted,
+    .loading-shell .muted {
+      color: #93c5fd;
+    }
+
+    .result-top {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 18px;
+    }
+
+    .result-kpis {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+      margin-bottom: 16px;
+    }
+
+    .kpi {
+      border-radius: 20px;
+      background: rgba(15, 23, 42, 0.82);
+      padding: 18px;
+      box-shadow: 0 12px 30px rgba(2, 8, 23, 0.35), inset 0 1px 0 rgba(148, 163, 184, 0.2);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      animation: cardRise .6s ease both;
+    }
+
+    .kpi.is-novelty {
+      background: rgba(49, 68, 133, 0.84);
+      border-color: rgba(143, 166, 255, 0.5);
+    }
+
+    .kpi.is-domestic {
+      background: rgba(28, 85, 107, 0.82);
+      border-color: rgba(117, 229, 255, 0.38);
+    }
+
+    .kpi.is-global {
+      background: rgba(93, 74, 48, 0.88);
+      border-color: rgba(255, 207, 136, 0.42);
+    }
+
+    .kpi.is-similarity {
+      background: rgba(88, 48, 79, 0.86);
+      border-color: rgba(252, 154, 174, 0.42);
+    }
+
+    .kpi h4 {
+      margin: 0;
+      font-size: 11px;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      color: #93c5fd;
+    }
+
+    .kpi .num {
+      margin-top: 10px;
+      font-family: 'Manrope', sans-serif;
+      font-size: clamp(1.75rem, 2.8vw, 2.45rem);
+      font-weight: 800;
+      color: #f8fafc;
+      letter-spacing: -0.045em;
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .kpi .sub {
+      margin-top: 8px;
+      font-size: 11px;
+      color: #bfdbfe;
+      font-weight: 600;
+    }
+
+    .kpi-status {
+      display: inline-flex;
+      align-items: center;
+      margin-top: 10px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.34);
+      color: #f8fafc;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      border: 1px solid rgba(191, 219, 254, 0.24);
+    }
+
+    .kpi-status[data-tone="high"] {
+      background: rgba(8, 145, 178, 0.22);
+      border-color: rgba(103, 232, 249, 0.45);
+      color: #cffafe;
+    }
+
+    .kpi-status[data-tone="medium"] {
+      background: rgba(59, 130, 246, 0.18);
+      border-color: rgba(147, 197, 253, 0.42);
+      color: #dbeafe;
+    }
+
+    .kpi-status[data-tone="low"] {
+      background: rgba(190, 24, 93, 0.16);
+      border-color: rgba(251, 113, 133, 0.36);
+      color: #ffe4e6;
+    }
+
+    .score-breakdown {
+      margin-top: 16px;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .score-card {
+      padding: 12px;
+      border-radius: 14px;
+      background: rgba(10, 22, 46, 0.66);
+      border: 1px solid rgba(148, 163, 184, 0.18);
+    }
+
+    .score-card strong {
+      display: block;
+      margin-top: 6px;
+      font-size: 1.15rem;
+      color: #f8fafc;
+      font-family: 'Manrope', sans-serif;
+      letter-spacing: -0.03em;
+    }
+
+    .rationale-list {
+      margin-top: 14px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .rationale-item {
+      padding: 10px 12px;
+      border-radius: 14px;
+      background: rgba(15, 23, 42, 0.56);
+      border: 1px solid rgba(148, 163, 184, 0.16);
+      color: #cbd5e1;
+      font-size: 12px;
+      line-height: 1.7;
+    }
+
+    .result-grid {
+      margin-top: 4px;
+      display: grid;
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      gap: 12px;
+      align-items: start;
+    }
+
+    .analysis-main {
+      grid-column: 1 / span 7;
+    }
+
+    .trend-panel {
+      grid-column: 1 / span 3;
+    }
+
+    .keyword-panel {
+      grid-column: 4 / span 4;
+    }
+
+    .paper-panel {
+      grid-column: 8 / span 5;
+      grid-row: 1 / span 2;
+    }
+
+    .panel {
+      border-radius: 22px;
+      background: rgba(13, 22, 46, 0.62);
+      box-shadow: 0 18px 42px rgba(2, 8, 23, 0.35), inset 0 1px 0 rgba(148, 163, 184, 0.16);
+      border: 1px solid rgba(148, 163, 184, 0.16);
+      padding: 18px;
+      animation: cardRise .7s ease both;
+    }
+
+    @keyframes cardRise {
+      from { opacity: 0; transform: translateY(14px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    #paperList {
+      max-height: 680px;
+      overflow-y: auto;
+      display: grid;
+      gap: 11px;
+      padding-right: 4px;
+    }
+
+    #paperList::-webkit-scrollbar { width: 8px; }
+    #paperList::-webkit-scrollbar-thumb {
+      border-radius: 999px;
+      background: rgba(116, 133, 170, 0.34);
+    }
+
+    .paper-item {
+      border-radius: 16px;
+      background: rgba(14, 25, 52, 0.84);
+      padding: 13px 13px 12px;
+      box-shadow: 0 8px 20px rgba(2, 8, 23, 0.35);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+    }
+
+    .chip-kci, .chip-global, .chip-preprint {
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .chip-kci { background: rgba(61, 219, 217, 0.2); color: #74f3f1; }
+    .chip-global { background: rgba(247, 167, 78, 0.25); color: #ffd08f; }
+    .chip-preprint { background: rgba(124, 107, 255, 0.24); color: #c3baff; }
+
+    .muted { color: #64748b; }
+
+    .hidden { display: none !important; }
+
+    .metric-label {
+      font-size: 11px;
+      color: #c3cfef;
+      font-weight: 700;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+
+    .trend-col {
+      display: grid;
+      flex: 1;
+      gap: 4px;
+      justify-items: center;
+      min-width: 22px;
+    }
+
+    .trend-val {
+      font-size: 10px;
+      color: #cbd5e1;
+      font-weight: 700;
+    }
+
+    .trend-bar {
+      width: 100%;
+      min-height: 6px;
+      border-radius: 8px 8px 3px 3px;
+      background: #5f7cff;
+      box-shadow: 0 8px 16px rgba(124, 107, 255, 0.2);
+    }
+
+    .trend-year {
+      font-size: 10px;
+      color: #bfdbfe;
+      font-weight: 700;
+    }
+
+    .word-cloud-item {
+      border-radius: 999px;
+      padding: 7px 11px;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      background: rgba(27, 39, 70, 0.6);
+      box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.18);
+      transform-origin: center;
+      user-select: none;
+    }
+
+    .word-cloud-zone {
+      min-height: 140px;
+      border-radius: 14px;
+      padding: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      background: rgba(15, 23, 42, 0.4);
+      border: 1px solid rgba(148, 163, 184, 0.17);
+    }
+
+    .tapable {
+      transition: transform .12s ease, filter .12s ease;
+    }
+
+    .tapable:active {
+      transform: scale(0.985);
+      filter: brightness(0.98);
+    }
+
+    @media (max-width: 900px) {
+      .wrap { width: min(96vw, 980px); padding: 20px 10px 24px; }
+      .brand { justify-content: flex-start; text-align: left; margin-bottom: 28px; }
+      .hero {
+        grid-template-columns: 1fr;
+        gap: 26px;
+        margin-bottom: 52px;
+      }
+      .hero-title { font-size: clamp(34px, 8vw, 48px); }
+      .search-form-wrap { width: min(94vw, 1000px); max-width: 100%; margin-bottom: 52px; }
+      .search-row { flex-direction: row; gap: 10px; }
+      .search-field { height: 58px; padding-left: 18px; }
+      .search-field > svg { left: 18px; width: 16px; height: 16px; }
+      #topic { line-height: 58px; padding: 0 16px 0 34px; height: 58px; font-size: 15px; }
+      #analyzeButton { width: auto; height: 48px; font-size: 12px; padding: 0 16px; border-radius: 12px; }
+      .security-note { text-align: left; padding-top: 26px; }
+      .process-steps { flex-direction: column; border-radius: 12px; }
+      .ps-step + .ps-step { border-left: none; border-top: 1px solid rgba(255, 255, 255, 0.06); }
+      .scope-area { grid-template-columns: 1fr; margin-top: 0; }
+      .scope-pair { grid-template-columns: 1fr; }
+      .scope-divider { width: auto; height: 1px; margin: 12px 0; }
+      .result-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .result-grid { grid-template-columns: 1fr; }
+      .score-breakdown { grid-template-columns: 1fr; }
+      .analysis-main, .trend-panel, .keyword-panel, .paper-panel { grid-column: auto; grid-row: auto; }
+      .options-grid { grid-template-columns: 1fr; }
+      select { min-height: 44px; }
+      #newSearchButton { min-height: 42px; }
+      #paperList { max-height: none; overflow: visible; }
+      .result-shell { padding: 22px; border-radius: 26px; }
+      .kpi { padding: 14px; }
+      .kpi .num { font-size: clamp(1.5rem, 7vw, 2.1rem); }
+      .result-top { gap: 12px; }
+      .result-top > div:last-child { width: 100%; overflow-x: auto; }
+      .result-top > div:last-child > * { flex: 0 0 auto; }
+      .loading-core { padding: 14px; }
+      .loading-dot { width: 74px; height: 74px; }
+      .loading-skeleton { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section id="search-page" class="page active">
+      <div class="brand">
+        <div class="brand-name"><span class="brand-primary">Original</span><span class="brand-dot">.</span></div>
+      </div>
+      <div class="hero">
+        <div class="hero-title-section">
+          <h1 class="hero-title">연구 주제의<br><span class="highlight">참신성을</span><br>분석합니다</h1>
+        </div>
+        <div class="hero-steps">
+          <div class="hero-step">
+            <div class="step-badge"><span class="step-num">01</span></div>
+            <div class="step-content">
+              <div class="step-title">쿼리 변환</div>
+              <div class="step-desc">국문 질의를 영문 학술 키워드로 자동 변환</div>
+            </div>
+          </div>
+          <div class="hero-step">
+            <div class="step-badge"><span class="step-num">02</span></div>
+            <div class="step-content">
+              <div class="step-title">병렬 API 수집</div>
+              <div class="step-desc">복수의 학술 DB API에 동시 요청을 보내 문헌 수집</div>
+            </div>
+          </div>
+          <div class="hero-step">
+            <div class="step-badge"><span class="step-num">03</span></div>
+            <div class="step-content">
+              <div class="step-title">참신성 점수화</div>
+              <div class="step-desc">유사도·시계열·희소도를 종합해 점수 산출</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <form id="analyzer-form" class="search-form-wrap">
+        <div class="search-meta">
+          <span id="queryLengthHint">권장 길이: 27자 이상 상세 질의</span>
+        </div>
+        <div class="search-row">
+          <div class="search-field">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M10.5 4a6.5 6.5 0 0 1 5.175 10.44l4.442 4.443a1 1 0 0 1-1.414 1.414l-4.443-4.442A6.5 6.5 0 1 1 10.5 4Zm0 2a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9Z" fill="currentColor"/>
+            </svg>
+            <textarea id="topic" name="topic" autocomplete="off" placeholder="예: 생성형 AI 기반 학술 피드백 자동화가 대학 글쓰기 교육에 미치는 영향"></textarea>
+          </div>
+          <button id="analyzeButton" class="tapable" type="submit">분석 시작</button>
+        </div>
+        <div id="errorBox"></div>
+      </form>
+
+      <div class="process-steps" style="display: none;">
+        <div class="ps-step">
+          <div class="ps-num">01</div>
+          <div class="ps-body">
+            <div class="ps-name">한/영 쿼리 매핑</div>
+            <div class="ps-desc">국문 주제를 영문 학술 키워드로 자동 변환 후 검색에 활용합니다</div>
+          </div>
+        </div>
+        <div class="ps-step">
+          <div class="ps-num">02</div>
+          <div class="ps-body">
+            <div class="ps-name">다중 소스 동시 검색</div>
+            <div class="ps-desc">KCI · OpenAlex · arXiv를 병렬 조회해 최대 범위의 문헌을 수집합니다</div>
+          </div>
+        </div>
+        <div class="ps-step">
+          <div class="ps-num">03</div>
+          <div class="ps-body">
+            <div class="ps-name">참신성 종합 산출</div>
+            <div class="ps-desc">유사도 · 시계열 분포 · 희소도를 종합해 참신성 점수를 계산합니다</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="scope-area">
+        <div class="scope-card">
+          <div class="scope-title">검색 범위</div>
+          <div class="scope-pair">
+            <div class="scope-group scope-kci-g">
+              <label class="scope-parent-row">
+                <input id="includeKci" type="checkbox" checked />
+                <span class="scope-parent-check"></span>
+                <span class="scope-parent-name">국내 저널</span>
+              </label>
+              <div id="kciTypeGroup" class="scope-children">
+                <label class="scope-child"><input type="checkbox" name="paperType" value="학술지" checked /><span>학술지</span></label>
+                <label class="scope-child"><input type="checkbox" name="paperType" value="석사" checked /><span>석사 논문</span></label>
+                <label class="scope-child"><input type="checkbox" name="paperType" value="박사" checked /><span>박사 논문</span></label>
+                <label class="scope-child"><input type="checkbox" name="paperType" value="후보" /><span>후보지</span></label>
+              </div>
+            </div>
+            <div class="scope-divider"></div>
+            <div class="scope-group scope-global-g">
+              <label class="scope-parent-row">
+                <input id="includeCrossref" type="checkbox" checked />
+                <span class="scope-parent-check"></span>
+                <span class="scope-parent-name">해외 저널</span>
+              </label>
+              <div id="globalTypeGroup" class="scope-children">
+                <label class="scope-child"><input type="checkbox" name="globalType" value="journal" checked /><span>학술지</span></label>
+                <label class="scope-child"><input type="checkbox" name="globalType" value="master" checked /><span>석사 논문</span></label>
+                <label class="scope-child"><input type="checkbox" name="globalType" value="doctor" checked /><span>박사 논문</span></label>
+                <label class="scope-child"><input id="includePreprint" type="checkbox" name="globalType" value="preprint" /><span>preprint</span></label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="options-card">
+          <h3 class="options-title">분석 옵션</h3>
+          <div class="options-grid">
+            <label class="field">
+              <span class="field-label">조사 기간</span>
+              <select id="rangeYears">
+                <option value="3">최근 3년</option>
+                <option value="5" selected>최근 5년</option>
+                <option value="10">최근 10년</option>
+                <option value="15">최근 15년</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span class="field-label">학문 분야</span>
+              <select id="fieldSelect">
+                <option value="all" selected>전체 분야</option>
+                <option value="인문학">인문학</option>
+                <option value="사회과학">사회과학</option>
+                <option value="자연과학">자연과학</option>
+                <option value="공학">공학</option>
+                <option value="의약학">의약학</option>
+                <option value="예술체육">예술체육</option>
+                <option value="복합학">복합학</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span class="field-label">최대 수집 건수</span>
+              <select id="pageSize">
+                <option value="60">60건</option>
+                <option value="100" selected>100건</option>
+                <option value="160">160건</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span class="field-label">최근성 가중치<span class="hint" title="값이 높을수록 최신 발표 논문의 영향력을 더 크게 반영합니다.">i</span></span>
+              <select id="recentWeight">
+                <option value="0.8">보수적</option>
+                <option value="1" selected>기본</option>
+                <option value="1.2">민감</option>
+              </select>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="security-note">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2 4.5 5v6.8c0 4.8 2.9 8.9 7.5 10.2 4.6-1.3 7.5-5.4 7.5-10.2V5L12 2Z" stroke="currentColor" stroke-width="1.7"/>
+          <path d="m8.6 12.1 2.1 2.1 4.7-4.7" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span>연구 주제는 외부에 공유되지 않으며, 분석 후 저장되지 않습니다.</span>
+      </div>
+    </section>
+
+    <section id="loading-page" class="page">
+      <div class="loading-shell">
+        <div class="loading-core">
+          <div class="loading-dot"></div>
+          <h2 class="loading-title">분석 중</h2>
+          <div id="loadingSubMessage" class="loading-sub">학술 키워드 다국어 변환 중...</div>
+          <p id="loadingMessage" class="muted" style="margin-top:6px;">국문 주제를 글로벌 학술 검색어로 정규화하고 있습니다.</p>
+          <div class="progress-track"><div id="loadingBar" class="progress-fill"></div></div>
+          <div class="loading-steps">
+            <div id="step1" class="active">1. 학술 키워드 다국어 변환 중...</div>
+            <div id="step2">2. 데이터베이스 조회 중...</div>
+            <div id="step3">3. 해외 저널 유사도 대조 중...</div>
+            <div id="step4">4. 국내 저널 유사도 대조 중...</div>
+            <div id="step5">5. 연구 주제의 참신성 지수 계산 중...</div>
+          </div>
+          <div class="loading-skeleton" aria-hidden="true">
+            <div></div>
+            <div></div>
+            <div></div>
+          </div>
+          <div id="reasoningHint" class="reason-strip">분석 경로: 질의 정규화 -> 근거 매칭 -> 참신성 조합</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="result-page" class="page">
+      <div class="result-shell">
+        <div class="result-top">
+          <div>
+            <h2 style="margin:0; font-family:Manrope,sans-serif; color:#f8fafc;">분석 결과</h2>
+            <p id="reportScope" class="muted" style="margin:6px 0 0; font-size:12px;">최근 5년 기준</p>
+          </div>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <select id="resultSortOrder" style="min-width:110px; background-color:rgba(15,23,42,0.72); color:#dbeafe; box-shadow: inset 0 0 0 1px rgba(148,163,184,0.35);">
+              <option value="latest" selected>최신순</option>
+              <option value="citation">인용순</option>
+              <option value="similarity">정확도순</option>
+            </select>
+            <div id="sourceSummary" style="padding:8px 12px; border-radius:999px; background:rgba(15,23,42,0.7); color:#bfdbfe; border:1px solid rgba(148,163,184,0.26); font-size:11px; font-weight:700;">KCI + 해외 저널</div>
+            <button id="newSearchButton" class="tapable" style="border:0; border-radius:999px; padding:9px 14px; cursor:pointer; background:#4e8ef7; color:#f8fafc; font-weight:700;">새 검색</button>
+          </div>
+        </div>
+
+        <div id="warningBox" class="hidden" style="margin-bottom:12px; border-radius:14px; padding:10px 12px; background:rgba(251,146,60,0.15); color:#c2410c; font-size:13px; font-weight:700;"></div>
+
+        <div class="result-kpis">
+          <article class="kpi is-novelty">
+            <h4>참신성 지수</h4>
+            <div id="noveltyValue" class="num">0%</div>
+            <div id="noveltyLabel" class="kpi-status" data-tone="medium">보통</div>
+            <div id="noveltyReason" class="sub">유사도·추이·희소성 기준</div>
+            <div class="sub">글로벌 기준 종합 산출</div>
+          </article>
+          <article class="kpi is-domestic">
+            <h4>국내 문헌 수</h4>
+            <div id="domesticCount" class="num">0</div>
+            <div class="sub">KCI 매칭 건수</div>
+          </article>
+          <article class="kpi is-global">
+            <h4>해외 문헌 수</h4>
+            <div id="globalCount" class="num">0</div>
+            <div class="sub">저널 + preprint</div>
+          </article>
+          <article class="kpi is-similarity">
+            <h4>상위 유사도 평균</h4>
+            <div id="avgSimilarity" class="num">0%</div>
+            <div class="sub">상위 12건 평균</div>
+          </article>
+        </div>
+
+        <div class="result-grid">
+          <section class="panel analysis-main">
+            <h3 style="margin:0 0 10px; font-family:Manrope,sans-serif; color:#f8fafc;">글로벌 분석 리포트</h3>
+            <p id="insightBox" class="muted" style="margin:0; line-height:1.8;"></p>
+            <div id="scoreBreakdown" class="score-breakdown"></div>
+            <div id="rationaleList" class="rationale-list"></div>
+
+            <div style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:14px;">
+              <div class="kpi" style="padding:12px;">
+                <h4>최근성 집중도</h4>
+                <div id="recentShare" class="num" style="font-size:28px;">0%</div>
+              </div>
+              <div class="kpi" style="padding:12px;">
+                <h4>총 문헌 수</h4>
+                <div id="matchCount" class="num" style="font-size:28px;">0</div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel trend-panel">
+            <div class="metric-label" style="margin-bottom:8px;">연도별 발표 추이</div>
+            <div id="trendChart" style="display:flex; align-items:flex-end; gap:6px; min-height:168px; padding:8px 6px 4px; border-radius:14px; background:rgba(10, 22, 46, 0.68);"></div>
+          </section>
+
+          <section class="panel keyword-panel">
+            <div class="metric-label" style="margin-bottom:8px;">핵심 키워드</div>
+            <div id="keywordCloud" class="word-cloud-zone"></div>
+
+            <div style="margin-top:16px; font-size:12px; color:#bfdbfe; border-top:1px solid rgba(100,116,139,0.28); padding-top:10px;">
+              국문-영문 매핑 쿼리: <span id="translatedTopic">-</span>
+            </div>
+          </section>
+
+          <section class="panel paper-panel">
+            <h3 style="margin:0 0 10px; font-family:Manrope,sans-serif; color:#f8fafc;">유사 논문 리스트</h3>
+            <div id="facetSummary" class="result-facets"></div>
+            <div id="paperList"></div>
+            <div style="margin-top:12px; font-size:11px; color:#93c5fd;">arXiv 오픈 액세스 상호운용성 정책을 준수하여 데이터를 사용합니다.</div>
+          </section>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const APP_CONFIG = { analyzeEndpoint: '/api/analyze', healthEndpoint: '/health' };
+
+    const form = document.getElementById('analyzer-form');
+    // searchShell removed in redesign
+    const errorBox = document.getElementById('errorBox');
+    const warningBox = document.getElementById('warningBox');
+    const analyzeButton = document.getElementById('analyzeButton');
+    const newSearchButton = document.getElementById('newSearchButton');
+    const includeKciInput = document.getElementById('includeKci');
+    const includeCrossrefInput = document.getElementById('includeCrossref');
+    const includePreprintInput = document.getElementById('includePreprint');
+    const kciTypeGroup = document.getElementById('kciTypeGroup');
+    const globalTypeGroup = document.getElementById('globalTypeGroup');
+    const loadingMessage = document.getElementById('loadingMessage');
+    const loadingSubMessage = document.getElementById('loadingSubMessage');
+    const loadingBar = document.getElementById('loadingBar');
+    const resultSortOrder = document.getElementById('resultSortOrder');
+    const queryLengthHint = document.getElementById('queryLengthHint');
+
+    const loadingStages = [
+      {
+        title: '학술 키워드 다국어 변환 중...',
+        detail: '국문 주제를 글로벌 학술 검색어로 정규화하고 있습니다.',
+        hint: '분석 경로: 질의 정규화 -> 번역 정합성 검토'
+      },
+      {
+        title: '데이터베이스 조회 중...',
+        detail: 'KCI, NANET, OpenAlex, Crossref, arXiv 소스를 병렬 조회하고 있습니다.',
+        hint: '분석 경로: 소스 병렬 조회 -> 실패 허용 수집'
+      },
+      {
+        title: '해외 저널 유사도 대조 중...',
+        detail: '해외 저널 및 preprint 문헌의 키워드·초록 유사도를 계산하고 있습니다.',
+        hint: '분석 경로: 글로벌 유사도 매칭 -> 상위 후보 정렬'
+      },
+      {
+        title: '국내 저널 유사도 대조 중...',
+        detail: '국내 학술지와 학위논문의 중복도 및 분야 적합도를 대조하고 있습니다.',
+        hint: '분석 경로: 국내 문헌 대조 -> 중복 제거'
+      },
+      {
+        title: '연구 주제의 참신성 지수 계산 중...',
+        detail: '유사도, 시계열 추세, 희소성 지표를 조합해 최종 점수를 계산하고 있습니다.',
+        hint: '분석 경로: 근거 조합 -> 참신성 산출 -> 결과 구성'
+      }
+    ];
+
+    const stopWords = new Set([
+      '연구', '분석', '고찰', '효과', '영향', '중심', '기반', '활용', '개발', '탐색', '비교', '검증', '대한',
+      '에서', '위한', '및', 'the', 'and', 'for', 'with', 'using', 'based', 'study', 'analysis', 'approach', 'model', 'models'
+    ]);
+
+    let loadingTimer = null;
+    let latestPayload = null;
+    let latestData = null;
+    let latestMeta = null;
+    let latestAnalysis = null;
+    let loadingIndex = 0;
+    let loadingProgress = 10;
+
+    form.topic.addEventListener('input', () => {
+      const text = (form.topic.value || '').trim();
+      const len = text.length;
+      queryLengthHint.textContent = `입력 길이 ${len}자 · 권장 27자+`;
+    });
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      clearMessages();
+
+      let payload;
+      try {
+        payload = getFormData();
+      } catch (error) {
+        showError(error.message);
+        return;
+      }
+
+      if (!payload.includeKci && !payload.includeCrossref && !payload.includePreprint) {
+        showError('검색 범위를 하나 이상 선택해주세요.');
+        return;
+      }
+      if (payload.includeKci && !payload.paperTypes.length) {
+        // auto-recover: all KCI sub-types
+        form.querySelectorAll('input[name="paperType"]').forEach((el) => { el.disabled = false; el.checked = true; });
+        payload.paperTypes = Array.from(form.querySelectorAll('input[name="paperType"]:checked')).map((el) => el.value);
+      }
+      if (payload.includeCrossref && !payload.globalTypes.length) {
+        // auto-recover: journal at minimum
+        const fallback = form.querySelector('input[name="globalType"][value="journal"]');
+        if (fallback) { fallback.disabled = false; fallback.checked = true; }
+        payload.globalTypes = Array.from(form.querySelectorAll('input[name="globalType"]:checked')).map((el) => el.value);
+      }
+
+      setLoadingState(true);
+      showPage('loading-page');
+
+      try {
+        const response = await fetchData(payload);
+        latestPayload = { ...payload };
+        latestData = response.data || [];
+        latestMeta = response.meta || {};
+        latestAnalysis = response.analysis || analyzeTopic(payload, latestData, latestMeta);
+
+        await completeLoadingState();
+        renderWarnings(latestMeta);
+        renderAll(latestAnalysis);
+        showPage('result-page');
+      } catch (error) {
+        showError(error.message || '분석 중 오류가 발생했습니다.');
+        showPage('search-page');
+      } finally {
+        setLoadingState(false);
+      }
+    });
+
+    includeCrossrefInput.addEventListener('change', () => {
+      const globals = form.querySelectorAll('input[name="globalType"]');
+      if (!includeCrossrefInput.checked) {
+        globalTypeGroup.style.opacity = '.35';
+        globals.forEach((el) => { el.checked = false; el.disabled = true; });
+      } else {
+        globalTypeGroup.style.opacity = '1';
+        globals.forEach((el) => { el.disabled = false; el.checked = el.value !== 'preprint'; });
+      }
+    });
+
+    includeKciInput.addEventListener('change', () => {
+      const locals = form.querySelectorAll('input[name="paperType"]');
+      if (!includeKciInput.checked) {
+        kciTypeGroup.style.opacity = '.35';
+        locals.forEach((el) => { el.checked = false; el.disabled = true; });
+      } else {
+        kciTypeGroup.style.opacity = '1';
+        locals.forEach((el) => { el.disabled = false; el.checked = true; });
+      }
+    });
+
+    resultSortOrder.addEventListener('change', () => {
+      if (!latestPayload || !latestData) return;
+      latestPayload = { ...latestPayload, sortOrder: resultSortOrder.value };
+      latestAnalysis = analyzeTopic(latestPayload, latestData, latestMeta || {});
+      renderAll(latestAnalysis);
+    });
+
+    newSearchButton.addEventListener('click', () => {
+      clearMessages();
+      showPage('search-page');
+      document.getElementById('topic').focus();
+    });
+
+    initializeScopeOptions();
+
+    function initializeScopeOptions() {
+      if (!includeCrossrefInput.checked) includeCrossrefInput.dispatchEvent(new Event('change'));
+      if (!includeKciInput.checked) includeKciInput.dispatchEvent(new Event('change'));
+    }
+
+    function showPage(id) {
+      ['search-page', 'loading-page', 'result-page'].forEach((pageId) => {
+        document.getElementById(pageId).classList.toggle('active', pageId === id);
+      });
+    }
+
+    function setLoadingState(loading) {
+      analyzeButton.disabled = loading;
+      if (loading) {
+        loadingIndex = 0;
+        loadingProgress = 10;
+        setLoadingStep(loadingIndex, loadingProgress);
+        loadingTimer = setInterval(() => {
+          loadingIndex = Math.min(loadingStages.length - 2, loadingIndex + 1);
+          loadingProgress = Math.min(86, loadingProgress + 17);
+          setLoadingStep(loadingIndex, loadingProgress);
+        }, 1200);
+      } else if (loadingTimer) {
+        clearInterval(loadingTimer);
+        loadingTimer = null;
+      }
+    }
+
+    async function completeLoadingState() {
+      setLoadingStep(loadingStages.length - 1, 100);
+      await new Promise((resolve) => window.setTimeout(resolve, 260));
+    }
+
+    function setLoadingStep(index, progressPercent) {
+      const current = loadingStages[index] || loadingStages[0];
+      loadingSubMessage.textContent = current.title;
+      loadingMessage.textContent = current.detail;
+      loadingBar.style.width = `${progressPercent}%`;
+      const reasoningHint = document.getElementById('reasoningHint');
+      if (reasoningHint) {
+        reasoningHint.textContent = current.hint;
+      }
+      ['step1', 'step2', 'step3', 'step4', 'step5'].forEach((id, i) => {
+        const el = document.getElementById(id);
+        el.classList.toggle('active', i === index);
+        el.classList.toggle('done', i < index);
+      });
+    }
+
+    function getFormData() {
+      const topic = (form.topic.value || '').trim();
+      if (!topic) throw new Error('분석할 논문 주제를 입력해주세요.');
+      return {
+        topic,
+        rangeYears: Number(document.getElementById('rangeYears').value),
+        field: document.getElementById('fieldSelect').value,
+        pageSize: Number(document.getElementById('pageSize').value),
+        recentWeight: Number(document.getElementById('recentWeight').value),
+        includeKci: includeKciInput.checked,
+        includeCrossref: includeCrossrefInput.checked,
+        includePreprint: includeCrossrefInput.checked && includePreprintInput.checked,
+        sortOrder: resultSortOrder ? resultSortOrder.value : 'latest',
+        paperTypes: Array.from(form.querySelectorAll('input[name="paperType"]:checked')).map((el) => el.value),
+        globalTypes: Array.from(form.querySelectorAll('input[name="globalType"]:checked')).map((el) => el.value)
+      };
+    }
+
+    async function fetchData(config) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 45000);
+
+      try {
+        const res = await fetch(APP_CONFIG.analyzeEndpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify(config),
+          signal: controller.signal
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok || !body.ok) {
+          throw new Error(body.error || '데이터를 가져오지 못했습니다. 잠시 후 다시 시도해주세요.');
+        }
+        return body;
+      } catch (error) {
+        if (error && error.name === 'AbortError') {
+          throw new Error('응답 대기 시간이 길어 분석을 중단했습니다. 잠시 후 다시 시도해주세요.');
+        }
+        throw error;
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+
+    function analyzeTopic(cfg, records, meta) {
+      const now = new Date().getFullYear();
+      const minYear = now - cfg.rangeYears + 1;
+      const topicTokens = tokenize(cfg.topic);
+
+      const filtered = records.filter((record) => {
+        const yearOk = !record.year || record.year >= minYear;
+        const fieldOk = cfg.field === 'all' || String(record.field || '').includes(cfg.field);
+        const typeLabel = String(record.type || '').toLowerCase();
+        const globalTypeMap = {
+          'Global Journal': 'journal',
+          'Pre-print': 'preprint'
+        };
+        const globalType = globalTypeMap[record.source]
+          || (typeLabel.includes('master') || typeLabel.includes('석사') ? 'master' : (typeLabel.includes('doctor') || typeLabel.includes('박사') ? 'doctor' : 'journal'));
+
+        const typeOk = (record.source === 'Global Journal' || record.source === 'Pre-print')
+          ? cfg.globalTypes.includes(globalType)
+          : cfg.paperTypes.some((selectedType) => String(record.type || '').includes(selectedType));
+
+        return yearOk && fieldOk && typeOk;
+      });
+
+      const scored = filtered.map((record) => {
+        const titleScore = overlapScore(topicTokens, tokenize(record.title));
+        const keywordScore = overlapScore(topicTokens, tokenize((record.keywords || []).join(' ')));
+        const abstractScore = overlapScore(topicTokens, tokenize(record.abstract));
+        const sourceWeight = (record.source === 'Global Journal' || record.source === 'Pre-print') ? 1.04 : 1;
+        const similarity = clamp((titleScore * 0.52 + keywordScore * 0.33 + abstractScore * 0.15) * sourceWeight, 0, 1);
+        return { ...record, similarity };
+      });
+
+      const relevant = scored.filter((record) => record.similarity >= 0.08 || includesLooseMatch(cfg.topic, record));
+      const sorted = sortRecords(relevant, cfg.sortOrder);
+      const topPapers = sorted.slice(0, 12);
+      const topAvg = average(topPapers.map((item) => item.similarity));
+      const highSimilarityShare = relevant.length
+        ? relevant.filter((item) => item.similarity >= 0.45).length / relevant.length
+        : 0;
+
+      const recentCount = relevant.filter((item) => item.year && item.year >= now - 2).length;
+      const recentShare = relevant.length ? recentCount / relevant.length : 0;
+      const globalShare = relevant.length ? relevant.filter((item) => item.source === 'Global Journal' || item.source === 'Pre-print').length / relevant.length : 0;
+
+      const overlapPressure = clamp((topAvg * 58) + (highSimilarityShare * 18), 0, 82);
+      const recencyPressure = recentShare * 22 * cfg.recentWeight;
+      const saturationPressure = Math.min(18, Math.log2(relevant.length + 1) * 4.2);
+      const yearDist = buildYearDistribution(relevant, minYear, now);
+      const diversityBonus = 8 * computeDistributionEntropy(yearDist.map((entry) => entry.count));
+      const globalCoverageBonus = globalShare * 6;
+      const scarcityScore = computeScarcityScore(relevant, topicTokens);
+      const scarcityBonus = scarcityScore * 18;
+
+      const noveltyScore = clamp(
+        100 - overlapPressure - recencyPressure - saturationPressure + scarcityBonus + diversityBonus + globalCoverageBonus,
+        3,
+        99
+      );
+
+      const keywordFreq = extractKeywordFrequency(relevant, topicTokens);
+      const domesticCount = relevant.filter((item) => item.source === 'KCI').length;
+      const globalCount = relevant.filter((item) => item.source === 'Global Journal' || item.source === 'Pre-print').length;
+      const globalJournalCount = relevant.filter((item) => item.source === 'Global Journal').length;
+      const preprintCount = relevant.filter((item) => item.source === 'Pre-print').length;
+
+      return {
+        noveltyScore,
+        verdict: getNoveltyVerdict(noveltyScore),
+        topAvg,
+        topPapers,
+        recentShare,
+        yearDist,
+        keywordFreq,
+        scarcityScore,
+        highSimilarityShare,
+        scoreBreakdown: {
+          similarity: Math.round((1 - topAvg) * 100),
+          trend: Math.round((1 - recentShare) * 100),
+          scarcity: Math.round(scarcityScore * 100)
+        },
+        domesticCount,
+        globalCount,
+        translatedTopic: meta.globalQueryTopic || meta.translatedTopic || cfg.topic,
+        reportScope: `최근 ${cfg.rangeYears}년 기준 · 총 ${relevant.length}건 분석`,
+        sourceSummary: `KCI ${domesticCount}건 · 해외 저널 ${globalJournalCount}건 · preprint ${preprintCount}건`,
+        matchCount: relevant.length,
+        rationale: buildRationale(topAvg, recentShare, scarcityScore, highSimilarityShare, domesticCount, globalCount),
+        insight: buildInsight(noveltyScore, recentShare, topAvg, domesticCount, globalCount, meta.globalQueryTopic || meta.translatedTopic || cfg.topic, keywordFreq, yearDist, highSimilarityShare)
+      };
+    }
+
+    function tokenize(text) {
+      return Array.from(new Set(String(text || '')
+        .toLowerCase()
+        .replace(/[^\p{L}\p{N}\s-]/gu, ' ')
+        .split(/\s+/)
+        .map((token) => token.trim())
+        .filter((token) => token.length >= 2)
+        .filter((token) => !stopWords.has(token))));
+    }
+
+    function overlapScore(baseTokens, targetTokens) {
+      if (!baseTokens.length || !targetTokens.length) return 0;
+      const set = new Set(targetTokens);
+      const inter = baseTokens.filter((token) => set.has(token)).length;
+      const union = new Set([...baseTokens, ...targetTokens]).size;
+      return union ? inter / union : 0;
+    }
+
+    function includesLooseMatch(topic, record) {
+      return tokenize(topic).some((token) =>
+        String(record.title || '').toLowerCase().includes(token) ||
+        String(record.abstract || '').toLowerCase().includes(token)
+      );
+    }
+
+    function sortRecords(records, sortOrder) {
+      const sorted = [...records];
+      if (sortOrder === 'citation') {
+        sorted.sort((a, b) => (b.citationCount - a.citationCount) || (b.similarity - a.similarity));
+      } else if (sortOrder === 'similarity') {
+        sorted.sort((a, b) => (b.similarity - a.similarity) || ((b.year || 0) - (a.year || 0)));
+      } else {
+        sorted.sort((a, b) => ((b.year || 0) - (a.year || 0)) || (b.similarity - a.similarity));
+      }
+      return sorted;
+    }
+
+    function average(values) {
+      return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+    }
+
+    function clamp(value, min, max) {
+      return Math.min(max, Math.max(min, value));
+    }
+
+    function buildYearDistribution(records, minYear, maxYear) {
+      const map = new Map();
+      for (let year = minYear; year <= maxYear; year += 1) map.set(year, 0);
+      records.forEach((record) => {
+        if (record.year && map.has(record.year)) map.set(record.year, map.get(record.year) + 1);
+      });
+      return Array.from(map.entries()).map(([year, count]) => ({ year, count }));
+    }
+
+    function computeDistributionEntropy(counts) {
+      const total = counts.reduce((sum, value) => sum + value, 0);
+      if (!total) return 0;
+      const probs = counts.filter((count) => count > 0).map((count) => count / total);
+      if (!probs.length) return 0;
+      const entropy = -probs.reduce((sum, p) => sum + (p * Math.log2(p)), 0);
+      const maxEntropy = Math.log2(probs.length);
+      return maxEntropy > 0 ? entropy / maxEntropy : 0;
+    }
+
+    function extractKeywordFrequency(records, topicTokens) {
+      const map = new Map();
+      records.forEach((record) => {
+        const tokens = (record.keywords && record.keywords.length) ? record.keywords : tokenize(`${record.title} ${record.abstract}`);
+        tokens.forEach((token) => {
+          const normalized = String(token).toLowerCase().trim();
+          if (!normalized || normalized.length < 2 || stopWords.has(normalized) || topicTokens.includes(normalized)) return;
+          map.set(normalized, (map.get(normalized) || 0) + 1);
+        });
+      });
+      return Array.from(map.entries()).sort((a, b) => b[1] - a[1]).slice(0, 18).map(([keyword, count]) => ({ keyword, count }));
+    }
+
+    function computeScarcityScore(records, topicTokens) {
+      if (!records.length || !topicTokens.length) return 0.7;
+      const tokenPresence = topicTokens.map((token) => {
+        const count = records.filter((record) => {
+          const haystack = `${record.title || ''} ${record.abstract || ''} ${(record.keywords || []).join(' ')}`.toLowerCase();
+          return haystack.includes(token);
+        }).length;
+        return count / records.length;
+      });
+      return clamp(1 - average(tokenPresence), 0.12, 0.94);
+    }
+
+    function getNoveltyVerdict(score) {
+      if (score >= 78) {
+        return { label: '매우 참신함', tone: 'high', summary: '기존 문헌 중복이 낮고 희소성이 높습니다.' };
+      }
+      if (score >= 55) {
+        return { label: '보통', tone: 'medium', summary: '유사 문헌은 있으나 차별화 여지가 충분합니다.' };
+      }
+      return { label: '기존 연구 다수', tone: 'low', summary: '선행연구가 많아 문제 정의와 실험 설계 차별화가 중요합니다.' };
+    }
+
+    function buildRationale(topAvg, recentShare, scarcityScore, highSimilarityShare, domesticCount, globalCount) {
+      return [
+        `유사도 평균 ${formatPercent(topAvg)}로 ${topAvg < 0.3 ? '낮은 중복도' : topAvg < 0.5 ? '중간 수준 중복도' : '높은 중복도'}를 보입니다.`,
+        `최근 5년 집중도 ${formatPercent(recentShare)}로 ${recentShare < 0.35 ? '희소 분야 성격이 강합니다.' : recentShare < 0.6 ? '최근 연구 증가가 완만합니다.' : '최근 연구 집중도가 높습니다.'}`,
+        `희소성 지표 ${Math.round(scarcityScore * 100)}점은 핵심 키워드 반복 빈도를 반영합니다.`,
+        `고유사도 문헌 비중은 ${formatPercent(highSimilarityShare)}입니다.`,
+        `국내 ${domesticCount}건, 해외 ${globalCount}건 문헌을 종합 반영했습니다.`
+      ];
+    }
+
+    function buildInsight(noveltyScore, recentShare, topAvg, domesticCount, globalCount, translatedTopic, keywordFreq, yearDist, highSimilarityShare) {
+      const peak = [...yearDist].sort((a, b) => b.count - a.count)[0];
+      const novelty = noveltyScore >= 78
+        ? '국내외 중복도가 높지 않아 참신성이 높은 편입니다.'
+        : noveltyScore >= 55
+          ? '유사 연구가 존재하지만 차별화 여지가 충분합니다.'
+          : '유사 선행연구가 많아 차별화 설계가 중요합니다.';
+
+      const keywords = keywordFreq.slice(0, 5).map((item) => item.keyword);
+      return [
+        novelty,
+        `상위 유사도 평균은 ${formatPercent(topAvg)}입니다.`,
+        `고유사도 문헌 비중은 ${formatPercent(highSimilarityShare)}입니다.`,
+        `최근 3년 집중도는 ${formatPercent(recentShare)}입니다.`,
+        `국내 ${domesticCount}건, 해외 ${globalCount}건 기준으로 분석했습니다.`,
+        `해외 매핑 검색어는 "${translatedTopic}" 입니다.`,
+        keywords.length ? `반복 키워드는 ${keywords.join(', ')}입니다.` : '',
+        peak && peak.count > 0 ? `${peak.year}년에 발표량이 가장 높았습니다.` : ''
+      ].filter(Boolean).join(' ');
+    }
+
+    function renderWarnings(meta) {
+      const warnings = Array.isArray(meta.warnings) ? meta.warnings : [];
+      if (!warnings.length) {
+        warningBox.classList.add('hidden');
+        warningBox.textContent = '';
+        return;
+      }
+      warningBox.classList.remove('hidden');
+      warningBox.textContent = warnings.join(' ');
+    }
+
+    function renderAll(analysis) {
+      document.getElementById('noveltyValue').textContent = `${Math.round(analysis.noveltyScore)}%`;
+      const verdict = analysis.verdict || getNoveltyVerdict(analysis.noveltyScore);
+      const noveltyLabel = document.getElementById('noveltyLabel');
+      noveltyLabel.textContent = verdict.label;
+      noveltyLabel.dataset.tone = verdict.tone;
+      document.getElementById('noveltyReason').textContent = verdict.summary;
+      document.getElementById('domesticCount').textContent = String(analysis.domesticCount);
+      document.getElementById('globalCount').textContent = String(analysis.globalCount);
+      document.getElementById('avgSimilarity').textContent = formatPercent(analysis.topAvg);
+      document.getElementById('translatedTopic').textContent = analysis.translatedTopic || '-';
+      document.getElementById('reportScope').textContent = analysis.reportScope;
+      document.getElementById('insightBox').textContent = analysis.insight;
+      document.getElementById('recentShare').textContent = formatPercent(analysis.recentShare);
+      document.getElementById('matchCount').textContent = String(analysis.matchCount);
+      document.getElementById('sourceSummary').textContent = analysis.sourceSummary;
+
+      renderScoreBreakdown(analysis.scoreBreakdown || {});
+      renderRationaleList(analysis.rationale || []);
+      renderTrendChart(analysis.yearDist);
+      renderKeywordCloud(analysis.keywordFreq);
+      renderFacetSummary(analysis.topPapers);
+      renderPaperList(analysis.topPapers);
+    }
+
+    function renderScoreBreakdown(breakdown) {
+      const target = document.getElementById('scoreBreakdown');
+      target.innerHTML = '';
+      [
+        ['유사도 역점수', breakdown.similarity ?? 0],
+        ['시계열 희소성', breakdown.trend ?? 0],
+        ['키워드 희소성', breakdown.scarcity ?? 0]
+      ].forEach(([label, value]) => {
+        const card = document.createElement('div');
+        card.className = 'score-card';
+        card.innerHTML = `<div class="metric-label">${escapeHtml(String(label))}</div><strong>${escapeHtml(String(value))}점</strong>`;
+        target.appendChild(card);
+      });
+    }
+
+    function renderRationaleList(items) {
+      const target = document.getElementById('rationaleList');
+      target.innerHTML = '';
+      items.forEach((item) => {
+        const row = document.createElement('div');
+        row.className = 'rationale-item';
+        row.textContent = item;
+        target.appendChild(row);
+      });
+    }
+
+    function renderFacetSummary(papers) {
+      const target = document.getElementById('facetSummary');
+      target.innerHTML = '';
+      if (!papers.length) {
+        return;
+      }
+
+      const sourceCount = papers.reduce((acc, paper) => {
+        const key = paper.source || 'Unknown';
+        acc[key] = (acc[key] || 0) + 1;
+        return acc;
+      }, {});
+
+      Object.entries(sourceCount)
+        .sort((a, b) => b[1] - a[1])
+        .forEach(([source, count]) => {
+          const chip = document.createElement('span');
+          chip.className = 'facet-chip';
+          chip.textContent = `${source} ${count}`;
+          target.appendChild(chip);
+        });
+    }
+
+    function renderTrendChart(yearDist) {
+      const chart = document.getElementById('trendChart');
+      chart.innerHTML = '';
+      const max = Math.max(1, ...yearDist.map((item) => item.count));
+
+      yearDist.forEach((item) => {
+        const col = document.createElement('div');
+        col.className = 'trend-col';
+
+        const value = document.createElement('div');
+        value.className = 'trend-val';
+        value.textContent = String(item.count);
+
+        const bar = document.createElement('div');
+        bar.className = 'trend-bar';
+        bar.style.height = `${Math.max(5, (item.count / max) * 120)}px`;
+
+        const label = document.createElement('div');
+        label.className = 'trend-year';
+        label.textContent = String(item.year).slice(2);
+
+        col.append(value, bar, label);
+        chart.appendChild(col);
+      });
+    }
+
+    function renderKeywordCloud(keywords) {
+      const cloud = document.getElementById('keywordCloud');
+      cloud.innerHTML = '';
+      if (!keywords.length) {
+        cloud.innerHTML = '<span class="muted" style="font-size:12px;">표시할 핵심 키워드가 충분하지 않습니다.</span>';
+        return;
+      }
+
+      const maxCount = Math.max(...keywords.map((item) => item.count));
+      keywords.forEach((item, idx) => {
+        const intensity = maxCount ? item.count / maxCount : 0;
+        const fontSize = Math.round(12 + (intensity * 12));
+        const rotate = (idx % 5 === 0) ? -4 : ((idx % 4 === 0) ? 4 : 0);
+        const chip = document.createElement('span');
+        chip.className = 'word-cloud-item';
+        chip.style.fontSize = `${fontSize}px`;
+        chip.style.fontWeight = intensity > 0.72 ? '800' : '700';
+        chip.style.color = intensity > 0.72 ? '#67e8f9' : (intensity > 0.45 ? '#a5b4fc' : '#cbd5e1');
+        chip.style.transform = `rotate(${rotate}deg)`;
+        chip.style.background = intensity > 0.72
+          ? 'rgba(14, 116, 144, 0.36)'
+          : (intensity > 0.45 ? 'rgba(67, 56, 202, 0.30)' : 'rgba(51, 65, 85, 0.62)');
+        chip.textContent = `${item.keyword} (${item.count})`;
+        cloud.appendChild(chip);
+      });
+    }
+
+    function renderPaperList(papers) {
+      const list = document.getElementById('paperList');
+      list.innerHTML = '';
+
+      if (!papers.length) {
+        list.innerHTML = '<div class="paper-item muted" style="text-align:center;">현재 조건에서 직접 비교 가능한 논문을 찾지 못했습니다.</div>';
+        return;
+      }
+
+      papers.forEach((paper) => {
+        const item = document.createElement('article');
+        item.className = 'paper-item';
+
+        const sourceKey = String(paper.source || '').toLowerCase();
+        const sourceClass = sourceKey === 'pre-print' ? 'chip-preprint' : (sourceKey === 'global journal' ? 'chip-global' : 'chip-kci');
+
+        const meta = [paper.year || '연도 미상', paper.type, paper.journal, paper.citationCount != null ? `인용 ${paper.citationCount}` : null]
+          .filter(Boolean)
+          .map((value) => `<span>${escapeHtml(String(value))}</span>`)
+          .join(' · ');
+
+        const links = [];
+        if (paper.doi) {
+          const doiUrl = paper.doi.startsWith('http') ? paper.doi : `https://doi.org/${paper.doi}`;
+          links.push(`<a href="${escapeHtml(doiUrl)}" target="_blank" rel="noreferrer" style="color:#67e8f9;font-size:12px;font-weight:700;">DOI</a>`);
+        }
+        if (paper.url) {
+          links.push(`<a href="${escapeHtml(paper.url)}" target="_blank" rel="noreferrer" style="color:#67e8f9;font-size:12px;font-weight:700;">원문</a>`);
+        }
+
+        item.innerHTML = `
+          <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;">
+            <div style="font-size:11px;color:#bfdbfe;font-weight:700;line-height:1.6;">${meta}</div>
+            <span class="${sourceClass}">${escapeHtml(String(paper.source || 'Source'))}</span>
+          </div>
+          <h4 style="margin:7px 0 0;color:#f8fafc;font-size:14px;font-weight:800;line-height:1.55;letter-spacing:-0.01em;">${escapeHtml(paper.title)}</h4>
+          <p style="margin:6px 0 0;color:#cbd5e1;font-size:12px;line-height:1.75;">${escapeHtml(trimText(paper.abstract || '초록 정보 없음', 170))}</p>
+          <div style="margin-top:8px;display:flex;gap:10px;">${links.join('')}</div>
+          <div style="margin-top:10px;display:grid;grid-template-columns:56px 1fr 44px;gap:6px;align-items:center;color:#bfdbfe;font-size:11px;font-weight:700;">
+            <span>유사도</span>
+            <div style="height:4px;border-radius:999px;background:rgba(30,41,59,0.88);overflow:hidden;">
+              <div style="height:100%;width:${Math.round(paper.similarity * 100)}%;background:#5f7cff;"></div>
+            </div>
+            <span style="text-align:right;">${formatPercent(paper.similarity)}</span>
+          </div>
+        `;
+
+        list.appendChild(item);
+      });
+    }
+
+    function formatPercent(value) {
+      return `${Math.round(value * 100)}%`;
+    }
+
+    function trimText(text, max) {
+      return text.length > max ? `${text.slice(0, max - 1)}...` : text;
+    }
+
+    function clearMessages() {
+      errorBox.classList.remove('show');
+      errorBox.textContent = '';
+      warningBox.classList.add('hidden');
+      warningBox.textContent = '';
+    }
+
+    function showError(message) {
+      errorBox.classList.add('show');
+      errorBox.textContent = message;
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+  </script>
+</body>
+</html>
