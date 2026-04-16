@@ -108,161 +108,186 @@ const ENTITY_SUBSTITUTION_MAP = {
 	'환자': ['patient', 'clinical population', 'care recipient', 'hospitalized patient', 'outpatient'],
 	'의사': ['physician', 'doctor', 'clinician', 'medical practitioner', 'healthcare provider'],
 	'간호사': ['nurse', 'nursing staff', 'healthcare worker', 'registered nurse', 'clinical nurse'],
-	'소비자': ['consumer', 'customer', 'user', 'buyer', 'end user'],
-	'사용자': ['user', 'end user', 'system user', 'participant', 'consumer'],
-	'운전자': ['driver', 'vehicle operator', 'road user', 'motorist', 'operator'],
-	'농업인': ['farmer', 'agricultural worker', 'producer', 'rural worker', 'cultivator'],
-	'제조업체': ['manufacturer', 'industrial firm', 'producer', 'factory operator', 'manufacturing company'],
-	'로봇': ['robot', 'autonomous agent', 'robotic system', 'service robot', 'intelligent robot'],
-	'센서': ['sensor', 'sensing device', 'detector', 'monitoring device', 'measurement device'],
-	'알고리즘': ['algorithm', 'computational method', 'model', 'optimization method', 'learning algorithm'],
-	'플랫폼': ['platform', 'digital platform', 'online system', 'service platform', 'technology platform'],
-	'기업': ['firm', 'company', 'enterprise', 'business organization', 'corporation']
-};
+	function buildAnalysisReport(cfg, records, meta) {
+		const now = new Date().getFullYear();
+		const minYear = now - cfg.rangeYears + 1;
+		const topicTokens = tokenizeForAnalysis(cfg.topic);
+		const queryPack = meta.queryPack || {
+			coreKeywordsKo: topicTokens,
+			coreKeywordsEn: []
+		};
 
-const CONCEPT_SYNONYM_MAP = {
-	'자기효능감': ['self-efficacy', 'self-confidence', 'perceived competence', 'efficacy belief', 'personal efficacy'],
-	'지속사용의도': ['continuance intention', 'continued use intention', 'behavioral intention', 'reuse intention', 'post-adoption intention'],
-	'수용의도': ['acceptance intention', 'adoption intention', 'usage intention', 'behavioral intention', 'intention to use'],
-	'학업성취': ['academic achievement', 'academic performance', 'learning outcome', 'scholastic attainment', 'educational outcome'],
-	'만족도': ['satisfaction', 'user satisfaction', 'perceived satisfaction', 'service satisfaction', 'customer satisfaction'],
-	'몰입': ['engagement', 'flow', 'immersion', 'involvement', 'learning engagement'],
-	'신뢰': ['trust', 'perceived trust', 'reliability', 'trustworthiness', 'institutional trust'],
-	'유용성': ['usefulness', 'perceived usefulness', 'utility', 'instrumentality', 'practical value'],
-	'사용편의성': ['ease of use', 'usability', 'perceived ease of use', 'user friendliness', 'ease of operation'],
-	'기술수용': ['technology acceptance', 'technology adoption', 'IT acceptance', 'digital adoption', 'system acceptance'],
-	'학습동기': ['learning motivation', 'academic motivation', 'motivation to learn', 'study motivation', 'learner motivation'],
-	'비판적사고': ['critical thinking', 'analytical thinking', 'higher-order thinking', 'reflective thinking', 'reasoning ability'],
-	'문제해결력': ['problem-solving ability', 'problem-solving skill', 'solution competence', 'problem resolution', 'problem-solving competency'],
-	'협업': ['collaboration', 'cooperation', 'teamwork', 'collaborative learning', 'joint work'],
-	'창의성': ['creativity', 'creative thinking', 'innovative capacity', 'originality', 'creative performance'],
-	'혁신': ['innovation', 'innovativeness', 'innovative behavior', 'technological innovation', 'organizational innovation'],
-	'성과': ['performance', 'outcome', 'effectiveness', 'organizational performance', 'task performance'],
-	'생산성': ['productivity', 'efficiency', 'work performance', 'output efficiency', 'operational productivity'],
-	'번아웃': ['burnout', 'emotional exhaustion', 'occupational burnout', 'job burnout', 'work-related exhaustion'],
-	'스트레스': ['stress', 'perceived stress', 'psychological stress', 'job stress', 'stress response'],
-	'우울': ['depression', 'depressive symptom', 'depressive mood', 'mental distress', 'clinical depression'],
-	'불안': ['anxiety', 'anxious symptom', 'psychological anxiety', 'state anxiety', 'trait anxiety'],
-	'회복탄력성': ['resilience', 'psychological resilience', 'adaptive resilience', 'coping resilience', 'recovery capacity'],
-	'삶의질': ['quality of life', 'well-being', 'life satisfaction', 'health-related quality of life', 'subjective well-being'],
-	'사회적지지': ['social support', 'perceived social support', 'support network', 'interpersonal support', 'family support'],
-	'조직몰입': ['organizational commitment', 'affective commitment', 'employee commitment', 'work commitment', 'institutional commitment'],
-	'직무만족': ['job satisfaction', 'work satisfaction', 'employee satisfaction', 'occupational satisfaction', 'career satisfaction'],
-	'리더십': ['leadership', 'leadership behavior', 'leadership style', 'transformational leadership', 'managerial leadership'],
-	'윤리': ['ethics', 'ethical perception', 'ethical decision making', 'moral reasoning', 'research ethics'],
-	'보안': ['security', 'information security', 'cybersecurity', 'system security', 'data security'],
-	'프라이버시': ['privacy', 'data privacy', 'information privacy', 'privacy concern', 'privacy protection'],
-	'설명가능성': ['explainability', 'interpretability', 'model transparency', 'algorithmic transparency', 'explainable AI'],
-	'정확도': ['accuracy', 'predictive accuracy', 'classification accuracy', 'diagnostic accuracy', 'estimation accuracy'],
-	'공정성': ['fairness', 'algorithmic fairness', 'equity', 'procedural fairness', 'distributive fairness'],
-	'안전성': ['safety', 'system safety', 'operational safety', 'patient safety', 'functional safety'],
-	'효율성': ['efficiency', 'operational efficiency', 'cost effectiveness', 'resource efficiency', 'process efficiency']
-};
+		// 불용어 리스트 (한글/영어)
+		const stopWords = new Set([
+			'연구','분석','고찰','효과','영향','중심','기반','활용','개발','탐색','비교','검증','대한','에서','위한','및',
+			'the','and','for','with','using','based','study','analysis','approach','model','models','of','on','in','to','by','is','as','an','a','at','from','this','that','it','be','are','or','was','were','has','have','had','but','not','can','will','which','their','its','these','those','such','into','between','among','through','after','before','about','more','other','new','also','than','been','may','one','two','three','four','five','six','seven','eight','nine','ten'
+		]);
 
-const MIME_TYPES = {
-	'.html': 'text/html; charset=utf-8',
-	'.js': 'text/javascript; charset=utf-8',
-	'.json': 'application/json; charset=utf-8',
-	'.css': 'text/css; charset=utf-8'
-};
+		// 필터/스코어링
+		const filtered = records.filter((record) => {
+			const yearOk = !record.year || record.year >= minYear;
+			const fieldOk = cfg.field === 'all' || String(record.field || '').includes(cfg.field);
+			const typeLabel = String(record.type || '').toLowerCase();
+			const globalTypeMap = { 'Global Journal': 'journal', 'Pre-print': 'preprint' };
+			const globalType = globalTypeMap[record.source]
+				|| (typeLabel.includes('master') || typeLabel.includes('석사') ? 'master' : (typeLabel.includes('doctor') || typeLabel.includes('박사') ? 'doctor' : 'journal'));
+			const typeOk = (record.source === 'Global Journal' || record.source === 'Pre-print')
+				? cfg.globalTypes.includes(globalType)
+				: cfg.paperTypes.some((selectedType) => String(record.type || '').includes(selectedType));
+			return yearOk && fieldOk && typeOk;
+		});
 
-const server = http.createServer(async (req, res) => {
-	try {
-		if (req.url.startsWith('/api/')) {
-			setCorsHeaders(req, res);
-			if (req.method === 'OPTIONS') {
-				res.writeHead(204);
-				res.end();
-				return;
-			}
+		// 유사도 계산
+		const scored = filtered.map((record) => {
+			const titleScore = overlapScoreForAnalysis(topicTokens, tokenizeForAnalysis(record.title));
+			// 키워드에서 불용어 제거
+			const filteredKeywords = (record.keywords || []).filter((kw) => !stopWords.has(String(kw).toLowerCase()));
+			const keywordScore = overlapScoreForAnalysis(topicTokens, tokenizeForAnalysis(filteredKeywords.join(' ')));
+			const abstractScore = overlapScoreForAnalysis(topicTokens, tokenizeForAnalysis(record.abstract));
+			const sourceWeight = (record.source === 'Global Journal' || record.source === 'Pre-print') ? 1.03 : 1;
+			const similarity = clampRange((titleScore * 0.52 + keywordScore * 0.33 + abstractScore * 0.15) * sourceWeight, 0, 1);
+			return { ...record, similarity };
+		});
+
+		// 유사 논문/집계
+		const relevant = scored.filter((record) => record.similarity >= 0.08 || includesLooseMatchForAnalysis(cfg.topic, record));
+		const sorted = sortRecordsForAnalysis(relevant, cfg.sortOrder);
+		const topPapers = sorted.slice(0, 20);
+		const similarities = topPapers.map((item) => Number(item.similarity || 0)).sort((a, b) => b - a);
+		const S_max = similarities[0] || 0;
+		const S_top5_avg = averageNumbers(similarities.slice(0, 5));
+		const S_mixed = (0.6 * S_max) + (0.4 * S_top5_avg);
+
+		let P_S = 1.0;
+		if (S_mixed >= 0.85) {
+			P_S = Math.max(0, 0.15 - (5 * (S_mixed - 0.85)));
+		} else if (S_mixed >= 0.40) {
+			P_S = 1 - (((S_mixed - 0.40) / 0.60) ** 2);
 		}
 
-		const requestUrl = new URL(req.url, `http://${req.headers.host || `localhost:${PORT}`}`);
-
-		if (req.method === 'GET' && (requestUrl.pathname === '/' || requestUrl.pathname === '/journal.html')) {
-			serveFile(STATIC_FILE, res);
-			return;
+		const similarPapersForT = scored.filter((paper) => Number(paper.similarity || 0) >= 0.5);
+		const recentThreshold = now - 3;
+		const C_recent = similarPapersForT.filter((paper) => paper.year && paper.year >= recentThreshold).length;
+		const C_total = similarPapersForT.length;
+		let T = 0.85;
+		if (C_total > 0) {
+			const T_raw = Math.exp(-2 * (C_recent / (C_total + 1)));
+			const T_min = Math.exp(-2);
+			T = clampRange((T_raw - T_min) / (1 - T_min), 0, 1);
 		}
 
-		if (req.method === 'GET' && requestUrl.pathname === '/health') {
-			sendJson(res, 200, {
-				ok: true,
-				kciConfigured: Boolean(KCI_CONFIG.defaultServiceKey),
-				nanetConfigured: Boolean(NANET_CONFIG.apiKey),
-				openAlexConfigured: Boolean(OPENALEX_CONFIG.apiKey),
-				llmExpansionConfigured: Boolean(LLM_EXPANSION_CONFIG.apiKey),
-				sources: ['KCI', 'NANET', 'Global Journal'],
-				crossrefPolitePool: true
-			});
-			return;
-		}
+		// 키워드 집계 (불용어 제거)
+		const queryKeywords = dedupeStringArray([...(queryPack.coreKeywordsEn || []), ...(queryPack.coreKeywordsKo || [])]).filter((kw) => !stopWords.has(String(kw).toLowerCase()));
+		const K = computePmiKeywordRarity(queryKeywords, relevant);
+		const confidence = calculateConfidence(queryPack, relevant);
+		const N_raw = clampRange(100 * ((0.5 * P_S) + (0.3 * T) + (0.2 * K)), 0, 100);
+		const PENALTY_CAP = 50;
+		const noveltyScore = Math.round(clampRange((relevant.length ? ((N_raw * confidence) + (PENALTY_CAP * (1 - confidence))) : PENALTY_CAP), 0, 100) * 10) / 10;
 
-		if (req.method === 'POST' && requestUrl.pathname === '/api/analyze') {
-			const body = await readJsonBody(req);
-			const data = await analyzeTopicSources(body);
-			sendJson(res, 200, { ok: true, ...data });
-			return;
-		}
+		const topAvg = averageNumbers(topPapers.map((item) => Number(item.similarity || 0)));
+		const highSimilarityShare = relevant.length ? relevant.filter((item) => Number(item.similarity || 0) >= 0.45).length / relevant.length : 0;
+		const recentShare = relevant.length ? relevant.filter((item) => item.year && item.year >= now - 4).length / relevant.length : 0;
+		const yearDist = buildAnalysisYearDistribution(relevant, minYear, now);
+		// 키워드 빈도 (불용어 제거)
+		const keywordFreq = extractKeywordFrequencyForAnalysis(relevant, topicTokens).filter((kw) => !stopWords.has(String(kw.keyword).toLowerCase()));
+		const scarcityScore = computeScarcityScore(relevant, topicTokens);
+		const creativityScore = computeCombinationalCreativity(cfg.topic, relevant, keywordFreq);
+		const verdict = classifyNovelty(noveltyScore, S_max);
+		const translatedTopic = meta.globalQueryTopic || meta.translatedTopic || cfg.topic;
+		// 저널 타입별 집계
+		const domesticCount = relevant.filter((item) => item.source === 'KCI').length;
+		const globalJournalCount = relevant.filter((item) => item.source === 'Global Journal').length;
+		const preprintCount = relevant.filter((item) => item.source === 'Pre-print').length;
+		const globalCount = globalJournalCount + preprintCount;
+		const rationale = buildNoveltyRationale({ noveltyScore, topAvg, recentShare, scarcityScore, highSimilarityShare, domesticCount, globalCount });
+		const recommendedKciJournals = buildRecommendedKciJournals(topPapers);
+		const expectedCitationIndex = Math.round((averageNumbers(topPapers.map((paper) => Number(paper.citationCount || 0))) * 0.72) + (noveltyScore * 0.38));
+		const rankedSimilarPapers = rankSimilarPapersForAnalysis(relevant, now, 20);
+		const searchWarning = confidence < 0.5 ? `검색 신뢰도가 낮습니다 (${Math.round(confidence * 100)}%). 쿼리 확장 또는 범위 확대를 권장합니다.` : null;
 
-		if (req.method === 'POST' && requestUrl.pathname === '/api/openalex/search') {
-			const body = await readJsonBody(req);
-			const topic = String(body.topic || '').trim();
-			if (!topic) {
-				throw createError(400, '검색할 주제를 입력하세요.');
-			}
+		// 진단 점수 산출 근거
+		const scoreBreakdown = {
+			similarity: Math.round(P_S * 100),
+			trend: Math.round(T * 100),
+			scarcity: Math.round(K * 100),
+			creativity: Math.round(creativityScore * 100)
+		};
+		const subScores = {
+			similarityPenalty: { S_max, S_top5_avg, S_mixed, P_S, weight: 0.5, reason: `유사 논문 ${rankedSimilarPapers.length}건, S_max=${S_max.toFixed(2)}` },
+			temporalSparsity: { C_recent, C_total, T_score: T, weight: 0.3, reason: `최근 3년 논문 ${C_recent}건 / 전체 ${C_total}건` },
+			keywordRarity: { K_score: K, weight: 0.2, reason: `핵심 키워드 희귀도 ${K.toFixed(2)}` },
+			confidence: { value: confidence, reason: `검색 커버리지 ${(confidence * 100).toFixed(1)}%` }
+		};
 
-			const rangeYears = clampNumber(body.rangeYears, 5, 3, 15);
-			const currentYear = new Date().getFullYear();
-			const fromYear = currentYear - rangeYears + 1;
-			const untilYear = currentYear;
-			const pageSize = clampNumber(body.pageSize, 60, 10, 120);
-			const globalTypes = normalizeGlobalTypes(body.globalTypes, false);
-			const translatedTopic = await translateTopicToEnglish(topic);
-			const result = await searchOpenAlexWorks({
-				topic,
-				translatedTopic,
-				fromYear,
-				untilYear,
-				globalTypes,
-				pageSize,
-				apiKey: OPENALEX_CONFIG.apiKey,
-				mailto: OPENALEX_CONFIG.mailto
-			});
+		// gapAnalysis/reportNarrative에 산출 근거 명확히 포함
+		const gapAnalysis = buildGapAnalysisReport({
+			cfg,
+			noveltyScore,
+			confidence,
+			topAvg,
+			recentShare,
+			highSimilarityShare,
+			scarcityScore,
+			creativityScore,
+			queryPack,
+			keywordFreq,
+			yearDist,
+			similarPapers: rankedSimilarPapers,
+			translatedTopic,
+			matchCount: relevant.length,
+			scoreBreakdown,
+			subScores
+		});
+		const reportNarrative = buildSpecReportNarrative({
+			cfg,
+			noveltyScore,
+			confidence,
+			verdict,
+			translatedTopic,
+			topAvg,
+			recentShare,
+			highSimilarityShare,
+			gapAnalysis,
+			keywordFreq,
+			matchCount: relevant.length,
+			scoreBreakdown,
+			subScores
+		});
 
-			sendJson(res, 200, {
-				ok: true,
-				data: result.data,
-				meta: {
-					translatedTopic,
-					fromYear,
-					untilYear,
-					globalTypes,
-					totalCount: result.data.length,
-					upstream: result.meta
-				}
-			});
-			return;
-		}
-
-		if (req.method === 'POST' && requestUrl.pathname === '/api/nanet/rel-journal') {
-			const body = await readJsonBody(req);
-			const searchTerm = String(body.searchTerm || body.topic || '').trim();
-			if (!searchTerm) {
-				throw createError(400, 'searchTerm(검색어)을 입력하세요.');
-			}
-
-			const data = await getNanetRelJournalRecommendations({
-				searchTerm,
-				searchType: String(body.searchType || '통합').trim() || '통합',
-				startYear: body.startYear,
-				endYear: body.endYear,
-				minConfidencePercent: clampNumber(body.minConfidencePercent, NANET_DETAIL_CONFIG.minConfidencePercent, 0, 100),
-				topN: clampNumber(body.topN, NANET_DETAIL_CONFIG.relJournalDefaultTopN, 1, 50)
-			});
-
-			sendJson(res, 200, { ok: true, ...data });
-			return;
-		}
+		return {
+			noveltyScore,
+			verdict,
+			verdictTone: verdict.tone,
+			verdictLabel: verdict.label,
+			verdictSummary: verdict.summary,
+			confidence,
+			searchWarning,
+			topAvg,
+			topPapers,
+			similarPapers: rankedSimilarPapers,
+			recentShare,
+			yearDist,
+			keywordFreq,
+			domesticCount,
+			globalCount,
+			preprintCount,
+			translatedTopic,
+			reportScope: `최근 ${cfg.rangeYears}년 기준 · 총 ${relevant.length}건 분석`,
+			sourceSummary: `국내 저널 ${domesticCount}건 · 해외 저널 ${globalJournalCount}건 · 프리프린트 ${preprintCount}건`,
+			matchCount: relevant.length,
+			highSimilarityShare,
+			scarcityScore,
+			creativityScore,
+			expectedCitationIndex,
+			recommendedKciJournals,
+			scoreBreakdown,
+			gapAnalysis,
+			reportNarrative,
+			subScores,
+			rationale,
+			insight: buildAnalysisInsight({ noveltyScore, recentShare, topAvg, domesticCount, globalCount, translatedTopic, keywordFreq, yearDist, highSimilarityShare, scarcityScore })
+		};
+	}
 
 		if (req.method === 'POST' && requestUrl.pathname === '/api/nanet/article-trend') {
 			const body = await readJsonBody(req);
