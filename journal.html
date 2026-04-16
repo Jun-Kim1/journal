@@ -1192,6 +1192,160 @@
       gap: 12px;
     }
 
+    .spec-grid {
+      margin-top: 24px;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+    }
+
+    .spec-card {
+      border-radius: 18px;
+      padding: 20px;
+      background:
+        radial-gradient(180px 100px at 0% 0%, rgba(56, 189, 248, 0.12), transparent 70%),
+        linear-gradient(180deg, rgba(9, 27, 51, 0.92) 0%, rgba(8, 20, 39, 0.92) 100%);
+      border: 1px solid rgba(136, 146, 176, 0.2);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+    }
+
+    .spec-card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .spec-card-title {
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #9bb0da;
+      font-weight: 800;
+    }
+
+    .spec-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(136, 146, 176, 0.22);
+      background: rgba(15, 23, 42, 0.34);
+      font-size: 10px;
+      font-weight: 800;
+      color: #d8e4ff;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .subscore-stack {
+      display: grid;
+      gap: 12px;
+    }
+
+    .subscore-row {
+      display: grid;
+      gap: 8px;
+    }
+
+    .subscore-meta {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      font-size: 12px;
+      color: #dce7ff;
+      font-weight: 700;
+    }
+
+    .subscore-caption {
+      font-size: 11px;
+      color: #90a3c9;
+      line-height: 1.5;
+    }
+
+    .subscore-rail {
+      width: 100%;
+      height: 10px;
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid rgba(136, 146, 176, 0.2);
+      overflow: hidden;
+    }
+
+    .subscore-fill {
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #22d3ee 0%, #8b5cf6 45%, #f472b6 100%);
+      box-shadow: 0 0 18px rgba(139, 92, 246, 0.28);
+    }
+
+    .gap-narrative {
+      display: grid;
+      gap: 12px;
+    }
+
+    .gap-lead {
+      font-size: 14px;
+      line-height: 1.8;
+      color: #e6f1ff;
+    }
+
+    .gap-signal-list,
+    .gap-angle-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .gap-chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .signal-item,
+    .angle-item {
+      border-radius: 14px;
+      padding: 12px 14px;
+      font-size: 12px;
+      line-height: 1.65;
+      border: 1px solid rgba(136, 146, 176, 0.16);
+    }
+
+    .signal-item {
+      background: rgba(6, 78, 59, 0.18);
+      color: #d1fae5;
+    }
+
+    .angle-item {
+      background: rgba(49, 46, 129, 0.22);
+      color: #e0e7ff;
+    }
+
+    .report-quote {
+      border-left: 3px solid rgba(34, 211, 238, 0.74);
+      padding: 4px 0 4px 14px;
+      color: #bfdbfe;
+      font-size: 12px;
+      line-height: 1.75;
+    }
+
+    .paper-stack-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .paper-stack-meta {
+      font-size: 11px;
+      color: #93c5fd;
+      line-height: 1.6;
+    }
+
     .rationale-item {
       padding: 14px 16px;
       border-radius: 14px;
@@ -1280,6 +1434,43 @@
       padding: 22px;
       box-shadow: 0 12px 24px rgba(2, 8, 23, 0.32);
       border: 1px solid rgba(136, 146, 176, 0.26);
+    }
+
+    .paper-item-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+      margin-bottom: 8px;
+    }
+
+    .paper-rank {
+      width: 32px;
+      height: 32px;
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+      font-size: 12px;
+      font-weight: 900;
+      color: #e6f1ff;
+      background: linear-gradient(135deg, rgba(34, 211, 238, 0.22), rgba(139, 92, 246, 0.28));
+      border: 1px solid rgba(186, 230, 253, 0.28);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+      flex-shrink: 0;
+    }
+
+    .paper-badge-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+
+    .paper-abstract {
+      margin: 12px 0 0;
+      color: #9fb2d8;
+      font-size: 12px;
+      line-height: 1.7;
     }
 
     .chip-kci, .chip-global {
@@ -1443,6 +1634,7 @@
       .result-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .result-grid { grid-template-columns: 1fr; gap: 18px; }
       .score-breakdown { grid-template-columns: 1fr; }
+      .spec-grid { grid-template-columns: 1fr; }
       .analysis-main, .trend-panel, .keyword-panel, .paper-panel { grid-column: auto; grid-row: auto; }
       .options-grid { grid-template-columns: 1fr; }
       select { min-height: 44px; }
@@ -1717,6 +1909,10 @@
             <h3 class="panel-title">글로벌 분석 리포트</h3>
             <p id="insightBox" class="muted" style="margin:0; line-height:1.8;"></p>
             <div id="scoreBreakdown" class="score-breakdown"></div>
+            <div class="spec-grid">
+              <div id="subScorePanel" class="spec-card"></div>
+              <div id="gapAnalysisPanel" class="spec-card"></div>
+            </div>
             <div id="rationaleList" class="rationale-list"></div>
 
             <div style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px; margin-top:24px;">
@@ -1747,7 +1943,10 @@
           </section>
 
           <section class="panel paper-panel">
-            <h3 class="panel-title">유사 논문 리스트</h3>
+            <div class="paper-stack-head">
+              <h3 class="panel-title" style="margin:0;">유사 논문 리스트</h3>
+              <div class="paper-stack-meta">Spec 기반 Top Similar Papers</div>
+            </div>
             <div id="facetSummary" class="result-facets"></div>
             <div id="paperList"></div>
             <div style="margin-top:12px; font-size:11px; color:#93c5fd;">국내외 학술 데이터 기준으로 결과를 제공합니다.</div>
@@ -2118,6 +2317,10 @@
       const similarity = Number.isFinite(rawSimilarity)
         ? clamp(rawSimilarity > 1 ? rawSimilarity / 100 : rawSimilarity, 0, 1)
         : 0;
+      const rawRankScore = Number(record.rankScore ?? record.rank ?? record.rankConfidence ?? 0);
+      const rankScore = Number.isFinite(rawRankScore)
+        ? clamp(rawRankScore > 1 ? rawRankScore / 100 : rawRankScore, 0, 1)
+        : 0;
 
       const yearNumber = Number(record.year ?? record.publicationYear ?? record.pubYear ?? 0);
       const citationRaw = Number(record.citationCount ?? record.citations ?? record.citedByCount ?? 0);
@@ -2141,13 +2344,15 @@
         url: record.url || record.link || '',
         year: Number.isFinite(yearNumber) && yearNumber > 0 ? yearNumber : undefined,
         citationCount: Number.isFinite(citationRaw) ? citationRaw : 0,
-        similarity
+        similarity,
+        rankScore
       };
     }
 
     function normalizeAnalysisPayload(rawAnalysis, records, meta, fallback, cfg) {
       const analysis = (rawAnalysis && typeof rawAnalysis === 'object') ? rawAnalysis : {};
       const topPapers = normalizePaperRecords(firstArray([analysis.topPapers]));
+      const similarPapers = normalizePaperRecords(firstArray([analysis.similarPapers, analysis.topPapers]));
       const mappedPapers = normalizePaperRecords(firstArray([
         analysis.papers,
         analysis.similarPapers,
@@ -2171,6 +2376,7 @@
         ? sortRecords(mappedPapers, cfg.sortOrder)
         : (fallbackPapers.length ? fallbackPapers : records);
       const mergedTopPapers = topPapers.length ? topPapers : (mergedPapers.length ? mergedPapers : (fallback.topPapers || []));
+      const mergedSimilarPapers = similarPapers.length ? similarPapers : mergedTopPapers;
       const mergedYearDist = yearDist.length
         ? yearDist
         : ((fallback.yearDist && fallback.yearDist.length) ? fallback.yearDist : deriveYearDistributionFromPapers(mergedPapers, cfg.rangeYears));
@@ -2184,6 +2390,7 @@
         ...analysis,
         papers: mergedPapers,
         topPapers: mergedTopPapers,
+        similarPapers: mergedSimilarPapers,
         yearDist: mergedYearDist,
         keywordFreq: mergedKeywordFreq,
         matchCount: Number.isFinite(matchCount) ? matchCount : mergedPapers.length,
@@ -2192,7 +2399,10 @@
         translatedTopic: analysis.translatedTopic || meta.globalQueryTopic || meta.translatedTopic || cfg.topic,
         insight: analysis.insight || fallback.insight,
         rationale: Array.isArray(analysis.rationale) ? analysis.rationale : fallback.rationale,
-        scoreBreakdown: (analysis.scoreBreakdown && typeof analysis.scoreBreakdown === 'object') ? analysis.scoreBreakdown : fallback.scoreBreakdown
+        scoreBreakdown: (analysis.scoreBreakdown && typeof analysis.scoreBreakdown === 'object') ? analysis.scoreBreakdown : fallback.scoreBreakdown,
+        subScores: (analysis.subScores && typeof analysis.subScores === 'object') ? analysis.subScores : {},
+        gapAnalysis: (analysis.gapAnalysis && typeof analysis.gapAnalysis === 'object') ? analysis.gapAnalysis : {},
+        reportNarrative: (analysis.reportNarrative && typeof analysis.reportNarrative === 'object') ? analysis.reportNarrative : {}
       };
     }
 
@@ -2565,6 +2775,7 @@
     function renderAll(analysis) {
       const safePapers = Array.isArray(analysis.topPapers) ? analysis.topPapers : [];
       const safeAllPapers = Array.isArray(analysis.papers) && analysis.papers.length ? analysis.papers : safePapers;
+      const safeSimilarPapers = Array.isArray(analysis.similarPapers) && analysis.similarPapers.length ? analysis.similarPapers : safePapers;
       const safeYearDist = Array.isArray(analysis.yearDist) ? analysis.yearDist : [];
       const safeKeywords = Array.isArray(analysis.keywordFreq) ? analysis.keywordFreq : [];
       const noveltyPercent = Math.round(analysis.noveltyScore || 0);
@@ -2590,12 +2801,14 @@
       document.getElementById('sourceSummary').textContent = analysis.sourceSummary;
 
       renderScoreBreakdown(analysis.scoreBreakdown || {});
+      renderSubScorePanel(analysis.subScores || {});
+      renderGapAnalysisPanel(analysis.gapAnalysis || {}, analysis.reportNarrative || {}, safeSimilarPapers);
       renderRationaleList(analysis.rationale || []);
       renderTrendChart(safeYearDist);
       renderTrendLineChart(safeYearDist);
       renderKeywordCloud(safeKeywords);
       renderFacetSummary(safeAllPapers);
-      renderPaperList(safeAllPapers);
+      renderPaperList(safeSimilarPapers);
       renderRecommendedKciJournals(analysis.recommendedKciJournals || []);
       renderKpiSparklines(analysis, safeYearDist, safeAllPapers);
     }
@@ -2661,6 +2874,90 @@
         row.textContent = item;
         target.appendChild(row);
       });
+    }
+
+    function renderSubScorePanel(subScores) {
+      const target = document.getElementById('subScorePanel');
+      if (!target) return;
+
+      const similarity = subScores.similarityPenalty || {};
+      const temporal = subScores.temporalSparsity || {};
+      const rarity = subScores.keywordRarity || {};
+      const confidence = Number(subScores.confidence || 0);
+      const rows = [
+        {
+          label: 'Similarity Penalty',
+          value: Math.round(Number(similarity.P_S || 0) * 100),
+          caption: `Smax ${Math.round(Number(similarity.S_max || 0) * 100)} · Top5 ${Math.round(Number(similarity.S_top5_avg || 0) * 100)}`
+        },
+        {
+          label: 'Temporal Sparsity',
+          value: Math.round(Number(temporal.T_score || 0) * 100),
+          caption: `Recent ${Number(temporal.C_recent || 0)} / Similar ${Number(temporal.C_total || 0)}`
+        },
+        {
+          label: 'Keyword Rarity',
+          value: Math.round(Number(rarity.K_score || 0) * 100),
+          caption: 'PMI 기반 키워드 공백도'
+        },
+        {
+          label: 'Search Confidence',
+          value: Math.round(confidence * 100),
+          caption: '검색 커버리지 및 키워드 매칭 품질'
+        }
+      ];
+
+      target.innerHTML = `
+        <div class="spec-card-head">
+          <div class="spec-card-title">Spec Diagnostics</div>
+          <span class="spec-pill">Subscores</span>
+        </div>
+        <div class="subscore-stack">
+          ${rows.map((row) => `
+            <div class="subscore-row">
+              <div class="subscore-meta">
+                <span>${escapeHtml(row.label)}</span>
+                <strong>${escapeHtml(String(row.value))}점</strong>
+              </div>
+              <div class="subscore-rail"><div class="subscore-fill" style="width:${Math.max(4, Math.min(100, row.value))}%;"></div></div>
+              <div class="subscore-caption">${escapeHtml(row.caption)}</div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    function renderGapAnalysisPanel(gapAnalysis, reportNarrative, similarPapers) {
+      const target = document.getElementById('gapAnalysisPanel');
+      if (!target) return;
+
+      const opportunitySignals = Array.isArray(gapAnalysis.opportunitySignals) ? gapAnalysis.opportunitySignals : [];
+      const recommendedAngles = Array.isArray(gapAnalysis.recommendedAngles) ? gapAnalysis.recommendedAngles : [];
+      const riskFlags = Array.isArray(gapAnalysis.riskFlags) ? gapAnalysis.riskFlags : [];
+      const dominantKeywords = Array.isArray(gapAnalysis.dominantKeywords) ? gapAnalysis.dominantKeywords : [];
+      const previewPapers = (similarPapers || []).slice(0, 2);
+
+      target.innerHTML = `
+        <div class="spec-card-head">
+          <div class="spec-card-title">Gap Analysis</div>
+          <span class="spec-pill">${escapeHtml(String((gapAnalysis.whitespaceLevel || 'medium').toUpperCase()))} whitespace</span>
+        </div>
+        <div class="gap-narrative">
+          <div class="gap-lead">${escapeHtml(reportNarrative.executiveSummary || gapAnalysis.overview || '분석 리포트를 생성 중입니다.')}</div>
+          <div class="report-quote">${escapeHtml(reportNarrative.gapStatement || reportNarrative.contributionHypothesis || '')}</div>
+          <div class="gap-chip-row">
+            ${(dominantKeywords.length ? dominantKeywords : ['핵심 키워드 데이터 부족']).slice(0, 4).map((keyword) => `<span class="facet-chip">${escapeHtml(keyword)}</span>`).join('')}
+          </div>
+          <div class="gap-signal-list">
+            ${opportunitySignals.slice(0, 2).map((item) => `<div class="signal-item">${escapeHtml(item)}</div>`).join('')}
+            ${riskFlags.slice(0, 1).map((item) => `<div class="signal-item" style="background:rgba(127,29,29,0.2);color:#fecaca;">${escapeHtml(item)}</div>`).join('')}
+          </div>
+          <div class="gap-angle-list">
+            ${recommendedAngles.slice(0, 2).map((item) => `<div class="angle-item">${escapeHtml(item)}</div>`).join('')}
+          </div>
+          ${previewPapers.length ? `<div class="report-quote">대표 유사 문헌: ${escapeHtml(previewPapers.map((paper) => `${paper.title} (${paper.year || 'n.d.'})`).join(' / '))}</div>` : ''}
+        </div>
+      `;
     }
 
     function renderFacetSummary(papers) {
@@ -2814,21 +3111,35 @@
         return;
       }
 
-      papers.forEach((paper) => {
+      papers.forEach((paper, index) => {
         const item = document.createElement('article');
         item.className = 'paper-item';
 
         const meta = [paper.journal || '저널 정보 없음', paper.year || '연도 미상']
           .map((value) => `<span>${escapeHtml(String(value))}</span>`)
           .join(' · ');
+        const sourceTone = paper.source === 'KCI' ? 'chip-kci' : 'chip-global';
+        const abstract = trimText(String(paper.abstract || '').trim(), 180);
+        const rankValue = Math.round(Number(paper.rankScore || 0) * 100);
 
         item.innerHTML = `
-          <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;">
-            <div style="font-size:11px;color:#96a8cf;font-weight:700;line-height:1.6;">${meta}</div>
-            <span class="facet-chip">유사도 ${formatPercent(paper.similarity)}</span>
+          <div class="paper-item-top">
+            <div style="display:flex;gap:12px;align-items:flex-start;min-width:0;">
+              <div class="paper-rank">${escapeHtml(String(index + 1))}</div>
+              <div style="min-width:0;">
+                <div style="font-size:11px;color:#96a8cf;font-weight:700;line-height:1.6;">${meta}</div>
+                <h4 style="margin:8px 0 0;color:#e6f1ff;font-size:16px;font-weight:800;line-height:1.6;letter-spacing:-0.01em;">${escapeHtml(paper.title)}</h4>
+              </div>
+            </div>
+            <div class="paper-badge-row">
+              <span class="${sourceTone}">${escapeHtml(paper.source || 'Source')}</span>
+              <span class="facet-chip">유사도 ${formatPercent(paper.similarity)}</span>
+              ${rankValue > 0 ? `<span class="facet-chip">랭크 ${escapeHtml(String(rankValue))}</span>` : ''}
+              <span class="facet-chip">인용 ${escapeHtml(String(paper.citationCount || 0))}</span>
+            </div>
           </div>
-          <h4 style="margin:8px 0 0;color:#e6f1ff;font-size:16px;font-weight:800;line-height:1.6;letter-spacing:-0.01em;">${escapeHtml(paper.title)}</h4>
           <p style="margin:6px 0 0;color:#aebcda;font-size:12px;line-height:1.6;">저자: ${escapeHtml(paper.author || '저자 정보 없음')}</p>
+          ${abstract ? `<p class="paper-abstract">${escapeHtml(abstract)}</p>` : ''}
           <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;">
             ${paper.doi ? `<a href="${escapeHtml(paper.doi.startsWith('http') ? paper.doi : `https://doi.org/${paper.doi}`)}" target="_blank" rel="noreferrer" class="facet-chip" style="text-decoration:none;">DOI 이동</a>` : '<span class="facet-chip">DOI 없음</span>'}
             ${paper.url ? `<a href="${escapeHtml(paper.url)}" target="_blank" rel="noreferrer" class="facet-chip" style="text-decoration:none;">논문 페이지</a>` : ''}

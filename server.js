@@ -60,6 +60,15 @@ const OPENALEX_CONFIG = {
 	].join(',')
 };
 
+const LLM_EXPANSION_CONFIG = {
+	baseUrl: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
+	apiKey: process.env.OPENAI_API_KEY || '',
+	model: process.env.OPENAI_MODEL || 'gpt-4.1-mini',
+	maxKeywordCount: 4,
+	cacheLimit: 200,
+	timeoutMs: 15000
+};
+
 const NANET_CONFIG = {
 	baseUrl: 'https://www.nanet.go.kr/search/openApi/search.do',
 	apiKey: process.env.NANET_API_KEY || '',
@@ -75,12 +84,79 @@ const NANET_DETAIL_CONFIG = {
 };
 
 let lastArxivRequestAt = 0;
+const dynamicExpansionCache = new Map();
 
 const PAPER_TYPE_MAP = {
 	'학술지': '학술지',
 	'석사': '석사',
 	'박사': '박사',
 	'후보': '후보'
+};
+
+const ENTITY_SUBSTITUTION_MAP = {
+	'학생': ['student', 'learner', 'undergraduate', 'college student', 'adolescent learner'],
+	'교사': ['teacher', 'instructor', 'educator', 'faculty', 'school teacher'],
+	'교수': ['professor', 'faculty member', 'academic staff', 'instructor', 'lecturer'],
+	'학부모': ['parent', 'caregiver', 'guardian', 'family member', 'parental figure'],
+	'직장인': ['employee', 'worker', 'professional', 'adult learner', 'office worker'],
+	'관리자': ['manager', 'administrator', 'supervisor', 'decision maker', 'organizational leader'],
+	'리더': ['leader', 'manager', 'supervisor', 'team leader', 'executive'],
+	'팀': ['team', 'workgroup', 'project team', 'collaborative group', 'organization unit'],
+	'노인': ['elderly', 'older adult', 'senior', 'aged population', 'older population'],
+	'청소년': ['adolescent', 'teenager', 'youth', 'young person', 'secondary student'],
+	'아동': ['child', 'children', 'young learner', 'pediatric population', 'school-age child'],
+	'환자': ['patient', 'clinical population', 'care recipient', 'hospitalized patient', 'outpatient'],
+	'의사': ['physician', 'doctor', 'clinician', 'medical practitioner', 'healthcare provider'],
+	'간호사': ['nurse', 'nursing staff', 'healthcare worker', 'registered nurse', 'clinical nurse'],
+	'소비자': ['consumer', 'customer', 'user', 'buyer', 'end user'],
+	'사용자': ['user', 'end user', 'system user', 'participant', 'consumer'],
+	'운전자': ['driver', 'vehicle operator', 'road user', 'motorist', 'operator'],
+	'농업인': ['farmer', 'agricultural worker', 'producer', 'rural worker', 'cultivator'],
+	'제조업체': ['manufacturer', 'industrial firm', 'producer', 'factory operator', 'manufacturing company'],
+	'로봇': ['robot', 'autonomous agent', 'robotic system', 'service robot', 'intelligent robot'],
+	'센서': ['sensor', 'sensing device', 'detector', 'monitoring device', 'measurement device'],
+	'알고리즘': ['algorithm', 'computational method', 'model', 'optimization method', 'learning algorithm'],
+	'플랫폼': ['platform', 'digital platform', 'online system', 'service platform', 'technology platform'],
+	'기업': ['firm', 'company', 'enterprise', 'business organization', 'corporation']
+};
+
+const CONCEPT_SYNONYM_MAP = {
+	'자기효능감': ['self-efficacy', 'self-confidence', 'perceived competence', 'efficacy belief', 'personal efficacy'],
+	'지속사용의도': ['continuance intention', 'continued use intention', 'behavioral intention', 'reuse intention', 'post-adoption intention'],
+	'수용의도': ['acceptance intention', 'adoption intention', 'usage intention', 'behavioral intention', 'intention to use'],
+	'학업성취': ['academic achievement', 'academic performance', 'learning outcome', 'scholastic attainment', 'educational outcome'],
+	'만족도': ['satisfaction', 'user satisfaction', 'perceived satisfaction', 'service satisfaction', 'customer satisfaction'],
+	'몰입': ['engagement', 'flow', 'immersion', 'involvement', 'learning engagement'],
+	'신뢰': ['trust', 'perceived trust', 'reliability', 'trustworthiness', 'institutional trust'],
+	'유용성': ['usefulness', 'perceived usefulness', 'utility', 'instrumentality', 'practical value'],
+	'사용편의성': ['ease of use', 'usability', 'perceived ease of use', 'user friendliness', 'ease of operation'],
+	'기술수용': ['technology acceptance', 'technology adoption', 'IT acceptance', 'digital adoption', 'system acceptance'],
+	'학습동기': ['learning motivation', 'academic motivation', 'motivation to learn', 'study motivation', 'learner motivation'],
+	'비판적사고': ['critical thinking', 'analytical thinking', 'higher-order thinking', 'reflective thinking', 'reasoning ability'],
+	'문제해결력': ['problem-solving ability', 'problem-solving skill', 'solution competence', 'problem resolution', 'problem-solving competency'],
+	'협업': ['collaboration', 'cooperation', 'teamwork', 'collaborative learning', 'joint work'],
+	'창의성': ['creativity', 'creative thinking', 'innovative capacity', 'originality', 'creative performance'],
+	'혁신': ['innovation', 'innovativeness', 'innovative behavior', 'technological innovation', 'organizational innovation'],
+	'성과': ['performance', 'outcome', 'effectiveness', 'organizational performance', 'task performance'],
+	'생산성': ['productivity', 'efficiency', 'work performance', 'output efficiency', 'operational productivity'],
+	'번아웃': ['burnout', 'emotional exhaustion', 'occupational burnout', 'job burnout', 'work-related exhaustion'],
+	'스트레스': ['stress', 'perceived stress', 'psychological stress', 'job stress', 'stress response'],
+	'우울': ['depression', 'depressive symptom', 'depressive mood', 'mental distress', 'clinical depression'],
+	'불안': ['anxiety', 'anxious symptom', 'psychological anxiety', 'state anxiety', 'trait anxiety'],
+	'회복탄력성': ['resilience', 'psychological resilience', 'adaptive resilience', 'coping resilience', 'recovery capacity'],
+	'삶의질': ['quality of life', 'well-being', 'life satisfaction', 'health-related quality of life', 'subjective well-being'],
+	'사회적지지': ['social support', 'perceived social support', 'support network', 'interpersonal support', 'family support'],
+	'조직몰입': ['organizational commitment', 'affective commitment', 'employee commitment', 'work commitment', 'institutional commitment'],
+	'직무만족': ['job satisfaction', 'work satisfaction', 'employee satisfaction', 'occupational satisfaction', 'career satisfaction'],
+	'리더십': ['leadership', 'leadership behavior', 'leadership style', 'transformational leadership', 'managerial leadership'],
+	'윤리': ['ethics', 'ethical perception', 'ethical decision making', 'moral reasoning', 'research ethics'],
+	'보안': ['security', 'information security', 'cybersecurity', 'system security', 'data security'],
+	'프라이버시': ['privacy', 'data privacy', 'information privacy', 'privacy concern', 'privacy protection'],
+	'설명가능성': ['explainability', 'interpretability', 'model transparency', 'algorithmic transparency', 'explainable AI'],
+	'정확도': ['accuracy', 'predictive accuracy', 'classification accuracy', 'diagnostic accuracy', 'estimation accuracy'],
+	'공정성': ['fairness', 'algorithmic fairness', 'equity', 'procedural fairness', 'distributive fairness'],
+	'안전성': ['safety', 'system safety', 'operational safety', 'patient safety', 'functional safety'],
+	'효율성': ['efficiency', 'operational efficiency', 'cost effectiveness', 'resource efficiency', 'process efficiency']
 };
 
 const MIME_TYPES = {
@@ -114,6 +190,7 @@ const server = http.createServer(async (req, res) => {
 				kciConfigured: Boolean(KCI_CONFIG.defaultServiceKey),
 				nanetConfigured: Boolean(NANET_CONFIG.apiKey),
 				openAlexConfigured: Boolean(OPENALEX_CONFIG.apiKey),
+				llmExpansionConfigured: Boolean(LLM_EXPANSION_CONFIG.apiKey),
 				sources: ['KCI', 'NANET', 'Global Journal'],
 				crossrefPolitePool: true
 			});
@@ -256,8 +333,10 @@ async function analyzeTopicSources(payload) {
 	const openAlexApiKey = OPENALEX_CONFIG.apiKey;
 	const openAlexMailto = OPENALEX_CONFIG.mailto;
 
-	const translatedTopic = await translateTopicToEnglish(topic);
-	const globalQueryTopic = buildGlobalQueryText(topic, translatedTopic);
+	const queryPack = await buildQueryPack(topic);
+	const translatedTopic = queryPack.translatedTopic;
+	const globalQueryTopic = queryPack.globalQueryTopic;
+	const globalQueryCandidates = [queryPack.primaryQueryEn, ...queryPack.expandedQueries].filter(Boolean).slice(0, 4);
 
 	const kciTask = includeKci
 		? searchKciPapers({
@@ -287,30 +366,30 @@ async function analyzeTopicSources(payload) {
 		});
 
 	const openAlexTask = includeCrossref
-		? searchOpenAlexWorks({
+		? searchAcrossQueryVariants(globalQueryCandidates, (query) => searchOpenAlexWorks({
 			topic,
-			translatedTopic: globalQueryTopic,
+			translatedTopic: query,
 			fromYear,
 			untilYear,
 			globalTypes,
-			pageSize: Math.max(30, Math.round(pageSize * 0.85)),
+			pageSize: Math.max(30, Math.round(pageSize * 0.45)),
 			apiKey: openAlexApiKey,
 			mailto: openAlexMailto
-		})
+		}), Math.max(30, Math.round(pageSize * 0.85)))
 		: Promise.resolve({
 			data: [],
 			meta: { skipped: true, reason: 'OpenAlex disabled by user' }
 		});
 
 	const crossrefTask = includeCrossref
-		? searchCrossrefPapers({
+		? searchAcrossQueryVariants(globalQueryCandidates, (query) => searchCrossrefPapers({
 			topic,
-			translatedTopic: globalQueryTopic,
+			translatedTopic: query,
 			fromYear,
 			untilYear,
-			pageSize: Math.max(20, Math.round(pageSize * 0.55)),
+			pageSize: Math.max(20, Math.round(pageSize * 0.3)),
 			globalTypes
-		})
+		}), Math.max(20, Math.round(pageSize * 0.55)))
 		: Promise.resolve({
 			data: [],
 			nextCursor: '',
@@ -318,13 +397,13 @@ async function analyzeTopicSources(payload) {
 		});
 
 	const arxivTask = includePreprint
-		? searchArxivPapers({
+		? searchAcrossQueryVariants(globalQueryCandidates, (query) => searchArxivPapers({
 			topic,
-			translatedTopic: globalQueryTopic,
+			translatedTopic: query,
 			fromYear,
 			untilYear,
-			pageSize: Math.max(20, Math.round(pageSize * 0.4))
-		})
+			pageSize: Math.max(15, Math.round(pageSize * 0.18))
+		}), Math.max(20, Math.round(pageSize * 0.4)))
 		: Promise.resolve({
 			data: [],
 			meta: { skipped: true, reason: 'Preprint disabled by user' }
@@ -364,6 +443,7 @@ async function analyzeTopicSources(payload) {
 		globalTypes,
 		sortOrder: String(payload.sortOrder || 'latest')
 	}, merged, {
+		queryPack,
 		translatedTopic,
 		globalQueryTopic,
 		domesticCount: mergedDomestic.length,
@@ -378,6 +458,7 @@ async function analyzeTopicSources(payload) {
 			warnings,
 			translatedTopic,
 			globalQueryTopic,
+			queryPack,
 			sources: {
 				includeKci,
 				includeCrossref,
@@ -407,20 +488,40 @@ async function analyzeTopicSources(payload) {
 		}
 	};
 }
+function calculateConfidence(queryPack, papers) {
+	const N_EXPECTED = 20;
+	const countConfidence = Math.min(1.0, papers.length / N_EXPECTED);
+	const allCorpusKws = new Set();
+	papers.forEach((paper) => {
+		(paper.keywords || []).forEach((keyword) => allCorpusKws.add(String(keyword).toLowerCase()));
+	});
+
+	const queryKeywords = dedupeStringArray([
+		...((queryPack && queryPack.coreKeywordsEn) || []),
+		...((queryPack && queryPack.coreKeywordsKo) || [])
+	]).map((keyword) => String(keyword).toLowerCase());
+
+	const keywordCoverage = queryKeywords.length
+		? queryKeywords.filter((keyword) => allCorpusKws.has(keyword)).length / queryKeywords.length
+		: 0.5;
+
+	return Math.round(clampRange(countConfidence * keywordCoverage, 0.05, 1.0) * 1000) / 1000;
+}
 
 function buildAnalysisReport(cfg, records, meta) {
 	const now = new Date().getFullYear();
 	const minYear = now - cfg.rangeYears + 1;
 	const topicTokens = tokenizeForAnalysis(cfg.topic);
+	const queryPack = meta.queryPack || {
+		coreKeywordsKo: topicTokens,
+		coreKeywordsEn: []
+	};
 
 	const filtered = records.filter((record) => {
 		const yearOk = !record.year || record.year >= minYear;
 		const fieldOk = cfg.field === 'all' || String(record.field || '').includes(cfg.field);
 		const typeLabel = String(record.type || '').toLowerCase();
-		const globalTypeMap = {
-				'Global Journal': 'journal',
-				'Pre-print': 'preprint'
-			};
+		const globalTypeMap = { 'Global Journal': 'journal', 'Pre-print': 'preprint' };
 		const globalType = globalTypeMap[record.source]
 			|| (typeLabel.includes('master') || typeLabel.includes('석사') ? 'master' : (typeLabel.includes('doctor') || typeLabel.includes('박사') ? 'doctor' : 'journal'));
 
@@ -442,44 +543,82 @@ function buildAnalysisReport(cfg, records, meta) {
 
 	const relevant = scored.filter((record) => record.similarity >= 0.08 || includesLooseMatchForAnalysis(cfg.topic, record));
 	const sorted = sortRecordsForAnalysis(relevant, cfg.sortOrder);
-	const topPapers = sorted.slice(0, 12);
-	const topAvg = averageNumbers(topPapers.map((item) => item.similarity));
-	const highSimilarityShare = relevant.length ? relevant.filter((item) => item.similarity >= 0.45).length / relevant.length : 0;
-	const recentWindow = Math.min(cfg.rangeYears, 5);
-	const recentCount = relevant.filter((item) => item.year && item.year >= now - (recentWindow - 1)).length;
-	const recentShare = relevant.length ? recentCount / relevant.length : 0;
-	const globalShare = relevant.length ? relevant.filter((item) => item.source === 'Global Journal' || item.source === 'Pre-print').length / relevant.length : 0;
+	const topPapers = sorted.slice(0, 20);
+	const similarities = topPapers.map((item) => Number(item.similarity || 0)).sort((a, b) => b - a);
+	const S_max = similarities[0] || 0;
+	const S_top5_avg = averageNumbers(similarities.slice(0, 5));
+	const S_mixed = (0.6 * S_max) + (0.4 * S_top5_avg);
+
+	let P_S = 1.0;
+	if (S_mixed >= 0.85) {
+		P_S = Math.max(0, 0.15 - (5 * (S_mixed - 0.85)));
+	} else if (S_mixed >= 0.40) {
+		P_S = 1 - (((S_mixed - 0.40) / 0.60) ** 2);
+	}
+
+	const similarPapersForT = scored.filter((paper) => Number(paper.similarity || 0) >= 0.5);
+	const recentThreshold = now - 3;
+	const C_recent = similarPapersForT.filter((paper) => paper.year && paper.year >= recentThreshold).length;
+	const C_total = similarPapersForT.length;
+	let T = 0.85;
+	if (C_total > 0) {
+		const T_raw = Math.exp(-2 * (C_recent / (C_total + 1)));
+		const T_min = Math.exp(-2);
+		T = clampRange((T_raw - T_min) / (1 - T_min), 0, 1);
+	}
+
+	const queryKeywords = dedupeStringArray([...(queryPack.coreKeywordsEn || []), ...(queryPack.coreKeywordsKo || [])]);
+	const K = computePmiKeywordRarity(queryKeywords, relevant);
+	const confidence = calculateConfidence(queryPack, relevant);
+	const N_raw = clampRange(100 * ((0.5 * P_S) + (0.3 * T) + (0.2 * K)), 0, 100);
+	const PENALTY_CAP = 50;
+	const noveltyScore = Math.round(clampRange((relevant.length ? ((N_raw * confidence) + (PENALTY_CAP * (1 - confidence))) : PENALTY_CAP), 0, 100) * 10) / 10;
+
+	const topAvg = averageNumbers(topPapers.map((item) => Number(item.similarity || 0)));
+	const highSimilarityShare = relevant.length ? relevant.filter((item) => Number(item.similarity || 0) >= 0.45).length / relevant.length : 0;
+	const recentShare = relevant.length ? relevant.filter((item) => item.year && item.year >= now - 4).length / relevant.length : 0;
 	const yearDist = buildAnalysisYearDistribution(relevant, minYear, now);
 	const keywordFreq = extractKeywordFrequencyForAnalysis(relevant, topicTokens);
 	const scarcityScore = computeScarcityScore(relevant, topicTokens);
 	const creativityScore = computeCombinationalCreativity(cfg.topic, relevant, keywordFreq);
-	const overlapPenalty = (topAvg ** 1.22) * 72;
-	const highSimilarityPenalty = highSimilarityShare * 26;
-	const recencyPenalty = recentShare * 24 * cfg.recentWeight;
-	const saturationPenalty = Math.min(26, Math.log2(relevant.length + 1) * 5.4);
-	const diversityBonus = 10 * computeDistributionEntropy(yearDist.map((entry) => entry.count));
-	const globalCoverageBonus = globalShare * 5;
-	const scarcityBonus = scarcityScore * 20;
-	const creativityBonus = (creativityScore - 0.32) * 34;
-
-	let noveltyScore;
-	if (!relevant.length) {
-		noveltyScore = 97;
-	} else {
-		noveltyScore = clampRange(
-			66 - overlapPenalty - highSimilarityPenalty - recencyPenalty - saturationPenalty + diversityBonus + globalCoverageBonus + scarcityBonus + creativityBonus,
-			1,
-			100
-		);
-	}
-
-	const verdict = classifyNovelty(noveltyScore);
+	const verdict = classifyNovelty(noveltyScore, S_max);
 	const translatedTopic = meta.globalQueryTopic || meta.translatedTopic || cfg.topic;
 	const domesticCount = meta.domesticCount || 0;
 	const globalCount = meta.globalCount || 0;
 	const rationale = buildNoveltyRationale({ noveltyScore, topAvg, recentShare, scarcityScore, highSimilarityShare, domesticCount, globalCount });
-	const recommendedKciJournals = buildRecommendedKciJournals(relevant);
+	const recommendedKciJournals = buildRecommendedKciJournals(topPapers);
 	const expectedCitationIndex = Math.round((averageNumbers(topPapers.map((paper) => Number(paper.citationCount || 0))) * 0.72) + (noveltyScore * 0.38));
+	const rankedSimilarPapers = rankSimilarPapersForAnalysis(relevant, now, 20);
+	const searchWarning = confidence < 0.5 ? `검색 신뢰도가 낮습니다 (${Math.round(confidence * 100)}%). 쿼리 확장 또는 범위 확대를 권장합니다.` : null;
+	const gapAnalysis = buildGapAnalysisReport({
+		cfg,
+		noveltyScore,
+		confidence,
+		topAvg,
+		recentShare,
+		highSimilarityShare,
+		scarcityScore,
+		creativityScore,
+		queryPack,
+		keywordFreq,
+		yearDist,
+		similarPapers: rankedSimilarPapers,
+		translatedTopic,
+		matchCount: relevant.length
+	});
+	const reportNarrative = buildSpecReportNarrative({
+		cfg,
+		noveltyScore,
+		confidence,
+		verdict,
+		translatedTopic,
+		topAvg,
+		recentShare,
+		highSimilarityShare,
+		gapAnalysis,
+		keywordFreq,
+		matchCount: relevant.length
+	});
 
 	return {
 		noveltyScore,
@@ -487,8 +626,11 @@ function buildAnalysisReport(cfg, records, meta) {
 		verdictTone: verdict.tone,
 		verdictLabel: verdict.label,
 		verdictSummary: verdict.summary,
+		confidence,
+		searchWarning,
 		topAvg,
 		topPapers,
+		similarPapers: rankedSimilarPapers,
 		recentShare,
 		yearDist,
 		keywordFreq,
@@ -504,10 +646,18 @@ function buildAnalysisReport(cfg, records, meta) {
 		expectedCitationIndex,
 		recommendedKciJournals,
 		scoreBreakdown: {
-			similarity: Math.round((1 - topAvg) * 100),
-			trend: Math.round((1 - recentShare) * 100),
-			scarcity: Math.round(scarcityScore * 100),
+			similarity: Math.round(P_S * 100),
+			trend: Math.round(T * 100),
+			scarcity: Math.round(K * 100),
 			creativity: Math.round(creativityScore * 100)
+		},
+		gapAnalysis,
+		reportNarrative,
+		subScores: {
+			similarityPenalty: { S_max, S_top5_avg, S_mixed, P_S, weight: 0.5 },
+			temporalSparsity: { C_recent, C_total, T_score: T, weight: 0.3 },
+			keywordRarity: { K_score: K, weight: 0.2 },
+			confidence
 		},
 		rationale,
 		insight: buildAnalysisInsight({ noveltyScore, recentShare, topAvg, domesticCount, globalCount, translatedTopic, keywordFreq, yearDist, highSimilarityShare, scarcityScore })
@@ -527,6 +677,50 @@ function handleSourceFailure(sourceName, error, warnings) {
 		meta: {
 			skipped: true,
 			reason: error && error.message ? error.message : `${sourceName} unavailable`
+		}
+	};
+}
+
+async function searchAcrossQueryVariants(queries, searchFn, maxResults) {
+	const uniqueQueries = dedupeStringArray((queries || []).filter(Boolean)).slice(0, 4);
+	if (!uniqueQueries.length) {
+		return { data: [], meta: { skipped: true, reason: 'No query variants available' } };
+	}
+
+	const settled = await Promise.allSettled(uniqueQueries.map((query) => searchFn(query)));
+	const mergedData = [];
+	const requestUrls = [];
+	const reasons = [];
+	let nextCursor = '';
+
+	settled.forEach((result, index) => {
+		if (result.status !== 'fulfilled') {
+			reasons.push(`${uniqueQueries[index]}: ${result.reason?.message || 'request failed'}`);
+			return;
+		}
+
+		const value = result.value || {};
+		mergedData.push(...(Array.isArray(value.data) ? value.data : []));
+		if (value.nextCursor) {
+			nextCursor = value.nextCursor;
+		}
+		const meta = value.meta || {};
+		if (meta.requestUrl) {
+			requestUrls.push(meta.requestUrl);
+		}
+		if (Array.isArray(meta.requestUrls)) {
+			requestUrls.push(...meta.requestUrls);
+		}
+	});
+
+	return {
+		data: dedupeNormalizedRecords(mergedData).slice(0, maxResults),
+		nextCursor,
+		meta: {
+			totalFetched: mergedData.length,
+			queries: uniqueQueries,
+			requestUrls: dedupeStringArray(requestUrls),
+			reasons
 		}
 	};
 }
@@ -721,6 +915,165 @@ async function translateTopicToEnglish(topic) {
 	}
 }
 
+function normalizeKeywordKey(value) {
+	return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function lookupStaticExpansion(keyword) {
+	const normalizedKeyword = normalizeKeywordKey(keyword);
+	const exactEntity = ENTITY_SUBSTITUTION_MAP[keyword] || ENTITY_SUBSTITUTION_MAP[normalizedKeyword];
+	const exactConcept = CONCEPT_SYNONYM_MAP[keyword] || CONCEPT_SYNONYM_MAP[normalizedKeyword];
+	if (!exactEntity && !exactConcept) {
+		return null;
+	}
+
+	return {
+		keyword,
+		source: 'static',
+		synonyms: dedupeStringArray(exactConcept || []),
+		entities: dedupeStringArray(exactEntity || []),
+		fallbackTranslation: ''
+	};
+}
+
+function buildLlmExpansionPrompt(keyword, translatedKeyword) {
+	return [
+		'You are expanding an academic search keyword for literature retrieval.',
+		`Input keyword: ${keyword}`,
+		translatedKeyword && translatedKeyword !== keyword ? `Direct English translation: ${translatedKeyword}` : '',
+		'Return compact JSON only with this schema:',
+		'{"synonyms": ["..."], "entities": ["..."]}',
+		'Synonyms: 3 to 5 English academic phrases for the same concept.',
+		'Entities: 3 to 5 English population, actor, object, or counterpart phrases if applicable.',
+		'Use terms suitable for Crossref, OpenAlex, and arXiv queries.',
+		'Avoid explanations, markdown, duplicates, or very generic words.'
+	].filter(Boolean).join('\n');
+}
+
+function trimCacheToLimit(cache, limit) {
+	if (cache.size < limit) {
+		return;
+	}
+	const oldestKey = cache.keys().next().value;
+	if (oldestKey) {
+		cache.delete(oldestKey);
+	}
+}
+
+function sanitizeExpansionTerms(terms) {
+	return dedupeStringArray((terms || [])
+		.map((term) => String(term || '').replace(/["'`]/g, '').replace(/\s+/g, ' ').trim())
+		.filter((term) => term.length >= 3)
+	).slice(0, 5);
+}
+
+function safeParseExpansionPayload(content) {
+	const raw = String(content || '').trim();
+	if (!raw) {
+		return null;
+	}
+	const fencedMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+	const candidate = fencedMatch ? fencedMatch[1].trim() : raw;
+	const objectMatch = candidate.match(/\{[\s\S]*\}/);
+	if (!objectMatch) {
+		return null;
+	}
+
+	try {
+		return JSON.parse(objectMatch[0]);
+	} catch (_error) {
+		return null;
+	}
+}
+
+async function requestLlmKeywordExpansion(keyword, translatedKeyword) {
+	if (!LLM_EXPANSION_CONFIG.apiKey) {
+		return null;
+	}
+
+	const cacheKey = normalizeKeywordKey(keyword);
+	if (dynamicExpansionCache.has(cacheKey)) {
+		return dynamicExpansionCache.get(cacheKey);
+	}
+
+	const url = `${LLM_EXPANSION_CONFIG.baseUrl.replace(/\/$/, '')}/responses`;
+	const payload = {
+		model: LLM_EXPANSION_CONFIG.model,
+		input: buildLlmExpansionPrompt(keyword, translatedKeyword),
+		max_output_tokens: 220,
+		text: {
+			format: {
+				type: 'json_schema',
+				name: 'academic_keyword_expansion',
+				schema: {
+					type: 'object',
+					additionalProperties: false,
+					properties: {
+						synonyms: { type: 'array', items: { type: 'string' } },
+						entities: { type: 'array', items: { type: 'string' } }
+					},
+					required: ['synonyms', 'entities']
+				}
+			}
+		}
+	};
+
+	try {
+		const json = await postJsonWithRetries(url, {
+			headers: {
+				Authorization: `Bearer ${LLM_EXPANSION_CONFIG.apiKey}`,
+				'Content-Type': 'application/json'
+			},
+			body: payload,
+			errorContext: 'LLM keyword expansion',
+			timeoutMs: LLM_EXPANSION_CONFIG.timeoutMs
+		});
+
+		const outputText = String(json?.output_text || '')
+			|| json?.output?.map((item) => item?.content?.map((part) => part?.text || '').join(' ')).join(' ')
+			|| '';
+		const parsed = safeParseExpansionPayload(outputText) || json;
+		const result = {
+			keyword,
+			source: 'llm',
+			synonyms: sanitizeExpansionTerms(parsed?.synonyms),
+			entities: sanitizeExpansionTerms(parsed?.entities),
+			fallbackTranslation: translatedKeyword || ''
+		};
+
+		if (!result.synonyms.length && !result.entities.length) {
+			return null;
+		}
+
+		trimCacheToLimit(dynamicExpansionCache, LLM_EXPANSION_CONFIG.cacheLimit);
+		dynamicExpansionCache.set(cacheKey, result);
+		return result;
+	} catch (_error) {
+		return null;
+	}
+}
+
+async function resolveAcademicKeywordExpansion(keyword) {
+	const staticExpansion = lookupStaticExpansion(keyword);
+	if (staticExpansion) {
+		return staticExpansion;
+	}
+
+	const fallbackTranslation = await translateTopicToEnglish(keyword);
+	const llmExpansion = await requestLlmKeywordExpansion(keyword, fallbackTranslation);
+	if (llmExpansion) {
+		return llmExpansion;
+	}
+
+	return {
+		keyword,
+		source: 'translation',
+		synonyms: sanitizeExpansionTerms(fallbackTranslation && fallbackTranslation !== keyword ? [fallbackTranslation] : []),
+		entities: [],
+		fallbackTranslation: fallbackTranslation || ''
+	};
+}
+
 function buildGlobalQueryText(topic, translatedTopic) {
 	const original = String(topic || '').trim();
 	const translated = String(translatedTopic || '').trim();
@@ -750,6 +1103,68 @@ function buildGlobalQueryText(topic, translatedTopic) {
 
 	const mergedTokens = dedupeStringArray(candidate.join(' ').split(/\s+/)).slice(0, 24);
 	return mergedTokens.join(' ');
+}
+
+async function buildQueryPack(topic) {
+	const primaryQueryKo = String(topic || '').trim();
+	const translatedTopic = await translateTopicToEnglish(primaryQueryKo);
+	const baseEnglishQuery = buildGlobalQueryText(primaryQueryKo, translatedTopic);
+	const coreKeywordsKo = extractCoreKeywords(primaryQueryKo);
+	const expansionTargets = coreKeywordsKo.slice(0, LLM_EXPANSION_CONFIG.maxKeywordCount);
+	const keywordExpansions = await Promise.all(expansionTargets.map((keyword) => resolveAcademicKeywordExpansion(keyword)));
+	const coreKeywordsEn = dedupeStringArray(keywordExpansions.flatMap((item) => [
+		...(item.synonyms || []).slice(0, 2),
+		...(item.entities || []).slice(0, 1),
+		item.fallbackTranslation || ''
+	]));
+
+	const primaryQueryEn = dedupeStringArray([
+		...tokenizeEnglish(baseEnglishQuery),
+		...coreKeywordsEn.flatMap((item) => String(item).split(/\s+/))
+	]).slice(0, 24).join(' ') || baseEnglishQuery || primaryQueryKo;
+
+	const expandedQueries = [];
+	for (const expansion of keywordExpansions) {
+		for (const alternative of (expansion.entities || []).slice(0, 3)) {
+			expandedQueries.push(dedupeStringArray([...tokenizeEnglish(primaryQueryEn), ...alternative.split(/\s+/)]).slice(0, 24).join(' '));
+		}
+
+		for (const alternative of (expansion.synonyms || []).slice(1, 3)) {
+			expandedQueries.push(dedupeStringArray([...tokenizeEnglish(primaryQueryEn), ...alternative.split(/\s+/)]).slice(0, 24).join(' '));
+		}
+	}
+
+	return {
+		primaryQueryKo,
+		primaryQueryEn,
+		translatedTopic,
+		globalQueryTopic: primaryQueryEn,
+		expandedQueries: dedupeStringArray(expandedQueries.filter(Boolean)).filter((query) => query && query !== primaryQueryEn).slice(0, 5),
+		coreKeywordsKo,
+		coreKeywordsEn: dedupeStringArray(coreKeywordsEn),
+		keywordExpansionSources: keywordExpansions.map((item) => ({
+			keyword: item.keyword,
+			source: item.source,
+			synonymCount: (item.synonyms || []).length,
+			entityCount: (item.entities || []).length
+		}))
+	};
+}
+
+function extractCoreKeywords(topic) {
+	const text = String(topic || '').trim();
+	const matchedDictionaryTerms = [
+		...Object.keys(CONCEPT_SYNONYM_MAP).filter((keyword) => text.includes(keyword)),
+		...Object.keys(ENTITY_SUBSTITUTION_MAP).filter((keyword) => text.includes(keyword))
+	];
+
+	const tokenCandidates = text
+		.replace(/[^\p{L}\p{N}\s]/gu, ' ')
+		.split(/\s+/)
+		.map((token) => token.trim())
+		.filter((token) => token.length >= 2);
+
+	return dedupeStringArray([...matchedDictionaryTerms, ...tokenCandidates]).slice(0, 8);
 }
 
 function isLowConfidenceTranslation(text) {
@@ -869,6 +1284,50 @@ async function fetchJsonWithRetries(url, options) {
 
 			if (response.status >= 500) {
 				throw createError(response.status, '논문 데이터 서버가 일시적으로 불안정합니다. 잠시 후 다시 시도하세요.');
+			}
+
+			if (!response.ok) {
+				const message = await safeReadText(response);
+				throw createError(response.status, `${errorContext} 요청 실패: ${message || response.statusText}`);
+			}
+
+			return response.json();
+		} catch (error) {
+			lastError = error;
+			if (!shouldRetry(error) || attempt === 2) {
+				throw error;
+			}
+			await wait(400 * (attempt + 1));
+		}
+	}
+
+	throw lastError || createError(500, `${errorContext} failed`);
+}
+
+async function postJsonWithRetries(url, options) {
+	const {
+		headers = {},
+		body = {},
+		errorContext = 'Request',
+		timeoutMs = 20000
+	} = options || {};
+	let lastError = null;
+
+	for (let attempt = 0; attempt < 3; attempt += 1) {
+		try {
+			const response = await fetch(url, {
+				method: 'POST',
+				headers,
+				body: JSON.stringify(body),
+				signal: AbortSignal.timeout(timeoutMs)
+			});
+
+			if (response.status === 429) {
+				throw createError(429, '요청이 너무 많습니다. 잠시 후 다시 시도하세요.');
+			}
+
+			if (response.status >= 500) {
+				throw createError(response.status, '외부 확장 서버가 일시적으로 불안정합니다. 잠시 후 다시 시도하세요.');
 			}
 
 			if (!response.ok) {
@@ -1933,6 +2392,47 @@ function computeScarcityScore(records, topicTokens) {
 	return clampRange(1 - averagePresence, 0.12, 0.94);
 }
 
+function computePmiKeywordRarity(keywords, papers) {
+	const uniqueKeywords = dedupeStringArray(keywords || []).map((keyword) => String(keyword).toLowerCase()).filter(Boolean);
+	if (uniqueKeywords.length < 2) {
+		return 0.5;
+	}
+
+	const corpusSize = (papers.length || 0) + 1;
+	const countWith = (keyword) => papers.filter((paper) => (paper.keywords || []).some((item) => String(item).toLowerCase().includes(keyword))).length + 1;
+	const countWithBoth = (left, right) => papers.filter((paper) => {
+		const lowerKeywords = (paper.keywords || []).map((item) => String(item).toLowerCase());
+		return lowerKeywords.some((item) => item.includes(left)) && lowerKeywords.some((item) => item.includes(right));
+	}).length + 1;
+
+	const pmiValues = [];
+	for (let i = 0; i < uniqueKeywords.length; i += 1) {
+		for (let j = i + 1; j < uniqueKeywords.length; j += 1) {
+			const P_i = countWith(uniqueKeywords[i]) / corpusSize;
+			const P_j = countWith(uniqueKeywords[j]) / corpusSize;
+			const P_ij = countWithBoth(uniqueKeywords[i], uniqueKeywords[j]) / corpusSize;
+			pmiValues.push(Math.log2(P_ij / ((P_i * P_j) + 1e-9)));
+		}
+	}
+
+	const meanPmi = averageNumbers(pmiValues);
+	return Math.round(clampRange(1 / (1 + Math.exp(meanPmi)), 0, 1) * 10000) / 10000;
+}
+
+function rankSimilarPapersForAnalysis(papers, currentYear, topK) {
+	const maxCitations = Math.max(1, ...papers.map((paper) => Number(paper.citationCount || 0)));
+	return [...papers]
+		.map((paper) => {
+			const age = currentYear - Number(paper.year || currentYear);
+			const recency = Math.max(0, 1 - (age / 20));
+			const citeNorm = Math.log1p(Number(paper.citationCount || 0)) / Math.log1p(maxCitations + 1);
+			const rankScore = (0.5 * Number(paper.similarity || 0)) + (0.25 * recency) + (0.25 * citeNorm);
+			return { ...paper, rankScore: Math.round(rankScore * 10000) / 10000 };
+		})
+		.sort((a, b) => b.rankScore - a.rankScore)
+		.slice(0, topK);
+}
+
 function classifyNovelty(score) {
 	if (score >= 78) {
 		return { label: '매우 참신함', tone: 'high', summary: '중복 연구 밀도가 낮고 희소성이 높습니다.' };
@@ -1990,6 +2490,116 @@ function buildAnalysisInsight(options) {
 		keywords.length ? `반복 키워드는 ${keywords.join(', ')}입니다.` : '',
 		peak && peak.count > 0 ? `${peak.year}년에 발표량이 가장 높았습니다.` : ''
 	].filter(Boolean).join(' ');
+}
+
+function buildGapAnalysisReport(options) {
+	const {
+		cfg,
+		noveltyScore,
+		confidence,
+		topAvg,
+		recentShare,
+		highSimilarityShare,
+		scarcityScore,
+		creativityScore,
+		queryPack,
+		keywordFreq,
+		yearDist,
+		similarPapers,
+		translatedTopic,
+		matchCount
+	} = options;
+
+	const leadKeywords = (keywordFreq || []).slice(0, 4).map((item) => item.keyword).filter(Boolean);
+	const quietYears = (yearDist || []).filter((item) => Number(item.count || 0) <= 1).map((item) => item.year);
+	const recentPeak = [...(yearDist || [])].sort((a, b) => b.count - a.count)[0];
+	const whitespaceLevel = noveltyScore >= 78 ? 'high' : noveltyScore >= 55 ? 'medium' : 'low';
+	const overlapLevel = topAvg >= 0.5 ? 'dense' : topAvg >= 0.28 ? 'moderate' : 'light';
+	const opportunitySignals = [];
+	const riskFlags = [];
+	const recommendedAngles = [];
+
+	if (scarcityScore >= 0.65) {
+		opportunitySignals.push('핵심 키워드 조합이 기존 코퍼스에서 반복적으로 소비되지 않아 개념적 공백이 존재합니다.');
+	}
+	if (recentShare < 0.35) {
+		opportunitySignals.push('최근 3~5년 발표 집중도가 낮아 후속 연구 파이프라인이 아직 포화되지 않았습니다.');
+	}
+	if (creativityScore >= 0.58) {
+		opportunitySignals.push('키워드 조합의 연결 강도가 낮아 융합형 연구 질문으로 재구성할 여지가 큽니다.');
+	}
+	if (highSimilarityShare >= 0.45 || topAvg >= 0.45) {
+		riskFlags.push('상위 유사 문헌 밀도가 높아 단순 반복 설계로는 차별성이 약할 수 있습니다.');
+	}
+	if (confidence < 0.45) {
+		riskFlags.push('검색 신뢰도가 낮아 범위 확대 또는 세부 키워드 보강이 필요합니다.');
+	}
+	if (matchCount >= 25 && recentPeak && recentPeak.count >= 5) {
+		riskFlags.push(`최근 발표가 ${recentPeak.year}년 전후로 집중되어 있어 후발 연구와의 비교 프레임을 정교화해야 합니다.`);
+	}
+
+	recommendedAngles.push(`${cfg.topic} 주제를 ${leadKeywords.length ? leadKeywords.join(' · ') : '핵심 변수 재정의'} 중심으로 세분화해 하위 집단 또는 맥락 조건을 명시합니다.`);
+	if (quietYears.length) {
+		recommendedAngles.push(`발표 공백이 보이는 ${quietYears.slice(0, 2).join(', ')}년 인접 구간을 활용해 시계열 갭 또는 사후 변화 효과를 겨냥합니다.`);
+	}
+	if ((queryPack?.coreKeywordsEn || []).length) {
+		recommendedAngles.push(`영문 검색축은 ${queryPack.coreKeywordsEn.slice(0, 3).join(', ')} 중심으로 유지하되 대상 집단·환경 변수를 추가해 검색 정밀도를 높입니다.`);
+	}
+
+	return {
+		whitespaceLevel,
+		overlapLevel,
+		queryFocus: translatedTopic,
+		dominantKeywords: leadKeywords,
+		underExploredYears: quietYears.slice(0, 4),
+		overview: whitespaceLevel === 'high'
+			? '코퍼스 중복이 높지 않고 시계열 포화도도 낮아 연구 공백을 공략하기 유리한 상태입니다.'
+			: whitespaceLevel === 'medium'
+				? '선행연구는 존재하지만 특정 집단, 맥락, 측정 변수를 좁히면 의미 있는 차별화가 가능합니다.'
+				: '핵심 문제 정의만으로는 중복 가능성이 높아 대상, 방법, 맥락 축을 더 선명하게 재설계해야 합니다.',
+		opportunitySignals: opportunitySignals.length ? opportunitySignals : ['현재 코퍼스 기준으로는 명확한 공백 신호가 제한적이므로 세부 조건 변수를 추가하는 것이 안전합니다.'],
+		riskFlags: riskFlags.length ? riskFlags : ['현 수준에서는 구조적 위험 신호가 크지 않지만, 표본·맥락 차별화는 여전히 필요합니다.'],
+		recommendedAngles: recommendedAngles.slice(0, 3),
+		similarPaperSnapshot: (similarPapers || []).slice(0, 3).map((paper) => ({
+			title: paper.title,
+			year: paper.year,
+			journal: paper.journal,
+			similarity: paper.similarity,
+			rankScore: paper.rankScore
+		}))
+	};
+}
+
+function buildSpecReportNarrative(options) {
+	const {
+		cfg,
+		noveltyScore,
+		confidence,
+		verdict,
+		translatedTopic,
+		topAvg,
+		recentShare,
+		highSimilarityShare,
+		gapAnalysis,
+		keywordFreq,
+		matchCount
+	} = options;
+
+	const dominantKeywords = (keywordFreq || []).slice(0, 4).map((item) => item.keyword).filter(Boolean);
+	const confidenceLabel = confidence >= 0.75 ? '높음' : confidence >= 0.45 ? '보통' : '낮음';
+
+	return {
+		executiveSummary: `${cfg.topic} 주제는 현재 ${verdict.label} 구간에 위치하며, 참신성 지수는 ${Math.round(noveltyScore)}점입니다. 검색 신뢰도는 ${confidenceLabel}(${Math.round(confidence * 100)}%)이고, 상위 유사 문헌 평균 중복도는 ${Math.round(topAvg * 100)}%입니다.`,
+		gapStatement: `${gapAnalysis.overview} 특히 ${gapAnalysis.dominantKeywords && gapAnalysis.dominantKeywords.length ? gapAnalysis.dominantKeywords.join(', ') : translatedTopic} 축에서 반복되는 선행연구 프레임과 차별화할 필요가 있습니다.`,
+		contributionHypothesis: gapAnalysis.recommendedAngles[0] || `${cfg.topic} 주제를 대상 집단 또는 적용 맥락 기준으로 재정의하면 선행연구와의 구분선이 더 선명해질 수 있습니다.`,
+		searchStrategyNote: `현재 검색은 "${translatedTopic}" 축으로 확장되었으며, 총 ${matchCount}건의 직접 비교 문헌을 기준으로 ${Math.round(recentShare * 100)}%가 최근 발표군에 속합니다.`,
+		riskAssessment: highSimilarityShare >= 0.45
+			? '상위 유사 문헌 비중이 높아 연구 질문을 더 좁게 정의하지 않으면 차별성이 빠르게 약화될 수 있습니다.'
+			: '유사 문헌 비중이 과도하게 높지 않아 방법론·대상 설계 차별화가 실질적 기여로 이어질 가능성이 있습니다.',
+		recommendedAbstractSentence: dominantKeywords.length
+			? `${cfg.topic}를 ${dominantKeywords.slice(0, 2).join(' 및 ')} 관점에서 재구성하여 기존 연구가 충분히 다루지 못한 맥락적 메커니즘을 검증한다.`
+			: `${cfg.topic}의 맥락적 차별 요인을 중심으로 기존 선행연구와 구분되는 실증 설계를 제안한다.`
+	};
 }
 
 function buildArxivUrl(options) {
