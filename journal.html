@@ -2730,7 +2730,6 @@
             <div class="novelty-ring-wrap">
               <div id="noveltyRing" class="novelty-ring"><span id="noveltyRingText">0%</span></div>
               <div>
-                <div id="noveltyValue" class="num">0%</div>
                 <div id="noveltyLabel" class="kpi-status" data-tone="medium">보통</div>
               </div>
             </div>
@@ -2740,19 +2739,19 @@
           <article class="kpi is-domestic">
             <h4>유사 논문 수</h4>
             <div id="similarPaperCount" class="num">0</div>
-            <div class="sub">상위 유사 문헌 기준</div>
+            <div class="sub">전체 유사 문헌 기준</div>
             <div id="sparkPapers" class="kpi-spark"></div>
           </article>
           <article class="kpi is-global">
             <h4>최근 3년 증가율</h4>
             <div id="researchFocusKpi" class="num">0%</div>
-            <div class="sub">발표 추세 기준</div>
+            <div id="trendCountSub" class="sub">발표 추세 기준</div>
             <div id="sparkTrend" class="kpi-spark"></div>
           </article>
           <article class="kpi is-similarity">
-            <h4>학술지 수준</h4>
+            <h4>게재 저널 수</h4>
             <div id="expectedCitationKpi" class="num">0</div>
-            <div class="sub">주요 학술지 지표</div>
+            <div class="sub">유사 논문 기준</div>
             <div id="sparkCitation" class="kpi-spark"></div>
           </article>
         </div>
@@ -2798,7 +2797,7 @@
           <section class="panel paper-panel">
             <div class="paper-stack-head">
               <h3 class="panel-title panel-title-tight">유사 논문 리스트</h3>
-              <div class="paper-stack-meta">Spec 기반 Top Similar Papers</div>
+              <div id="paperListMeta" class="paper-stack-meta">유사도 기반 전체 논문</div>
             </div>
             <div id="facetSummary" class="result-facets"></div>
             <div id="paperList"></div>
@@ -2806,7 +2805,7 @@
           </section>
 
           <section class="panel panel-main-wide">
-            <h3 class="panel-title">추천 국내 저널</h3>
+            <h3 class="panel-title">투고 참고 저널</h3>
             <div id="recommendedKciList" class="journal-card-grid"></div>
           </section>
 
@@ -3666,10 +3665,12 @@
       const safeAllPapers = Array.isArray(analysis.papers) && analysis.papers.length ? analysis.papers : safePapers;
       const safeSimilarPapers = Array.isArray(analysis.similarPapers) && analysis.similarPapers.length ? analysis.similarPapers : safePapers;
       const safeYearDist = Array.isArray(analysis.yearDist) ? analysis.yearDist : [];
-      const safeKeywords = Array.isArray(analysis.keywordFreq) ? analysis.keywordFreq : [];
+      const rawKeywords = Array.isArray(analysis.keywordFreq) && analysis.keywordFreq.length
+        ? analysis.keywordFreq
+        : (Array.isArray(analysis.topKeywords) ? analysis.topKeywords : []);
+      const safeKeywords = normalizeKeywordFrequency(rawKeywords).filter((kw) => kw.count >= 1);
       const noveltyPercent = Math.round(analysis.noveltyScore || 0);
 
-      document.getElementById('noveltyValue').textContent = `${noveltyPercent}%`;
       const ring = document.getElementById('noveltyRing');
       const ringText = document.getElementById('noveltyRingText');
       if (ring) ring.style.setProperty('--pct', String(clamp(noveltyPercent, 0, 100)));
@@ -3680,9 +3681,17 @@
       noveltyLabel.dataset.tone = verdict.tone;
       document.getElementById('noveltyReason').textContent = verdict.summary;
       document.getElementById('similarPaperCount').textContent = String(analysis.matchCount);
-      document.getElementById('researchFocusKpi').textContent = formatPercent(analysis.recentShare);
-      const qGrade = analysis.expectedCitationIndex >= 30 ? 'Q1급' : (analysis.expectedCitationIndex >= 20 ? 'Q2급' : 'Q3급');
-      document.getElementById('expectedCitationKpi').textContent = qGrade;
+      const trendRate = Number(analysis.trendGrowthRate || 0);
+      const trendEl = document.getElementById('researchFocusKpi');
+      if (trendEl) trendEl.textContent = trendRate >= 0 ? `+${trendRate}%` : `${trendRate}%`;
+      const trendCountSubEl = document.getElementById('trendCountSub');
+      if (trendCountSubEl && analysis.trendCounts) {
+        const recent3Count = Number(analysis.trendCounts.recent3Count || 0);
+        const prior3Count = Number(analysis.trendCounts.prior3Count || 0);
+        trendCountSubEl.textContent = `최근3년 ${recent3Count}건 / 이전3년 ${prior3Count}건`;
+      }
+      const journalCount = Array.isArray(analysis.recommendedJournals) ? analysis.recommendedJournals.length : 0;
+      document.getElementById('expectedCitationKpi').textContent = journalCount ? `${journalCount}종` : '-';
       document.getElementById('translatedTopic').textContent = analysis.translatedTopic || '-';
       const reportScopeEl = document.getElementById('reportScope');
       if (reportScopeEl) reportScopeEl.textContent = analysis.reportScope;
@@ -3692,7 +3701,7 @@
       document.getElementById('sourceSummary').textContent = analysis.sourceSummary;
 
       const resultTopicEl = document.getElementById('resultTopic');
-      if (resultTopicEl) resultTopicEl.textContent = analysis.translatedTopic || latestPayload?.topic || '-';
+      if (resultTopicEl) resultTopicEl.textContent = latestPayload?.topic || analysis.translatedTopic || '-';
       const resultDateEl = document.getElementById('resultDate');
       if (resultDateEl) {
         const now = new Date();
@@ -3710,7 +3719,7 @@
       renderKeywordCloud(safeKeywords);
       renderFacetSummary(safeAllPapers);
       renderPaperList(safeSimilarPapers);
-      renderRecommendedKciJournals(analysis.recommendedKciJournals || []);
+      renderRecommendedKciJournals(analysis.recommendedJournals || analysis.recommendedKciJournals || []);
       renderKpiSparklines(analysis, safeYearDist, safeAllPapers);
     }
 
@@ -3719,23 +3728,30 @@
       const directionTarget = document.getElementById('directionList');
       if (!strengthTarget || !directionTarget) return;
 
-      const strengths = [
-        '최신 AI 기술 적용',
-        '실증적 교육 접근',
-        '명확한 연구 목표'
-      ];
-      const directions = [
-        '특정 학년 세분화',
-        '장기 효과 추적',
-        '문화권 비교 연구'
-      ];
-
       const gap = analysis.gapAnalysis || {};
+
+      // 강점: keySignals → opportunitySignals → 동적 생성 (하드코딩 제거)
+      const strengths = [];
       if (Array.isArray(gap.keySignals) && gap.keySignals.length) {
-        strengths.splice(0, strengths.length, ...gap.keySignals.slice(0, 3));
+        strengths.push(...gap.keySignals.slice(0, 3));
+      } else if (Array.isArray(gap.opportunitySignals) && gap.opportunitySignals.length) {
+        strengths.push(...gap.opportunitySignals.slice(0, 3));
+      } else {
+        const kws = Array.isArray(gap.dominantKeywords) && gap.dominantKeywords.length ? gap.dominantKeywords.slice(0, 2).join(', ') : '핵심 변수';
+        const score = Math.round(analysis.noveltyScore || 0);
+        if (score >= 70) strengths.push('선행 연구 밀도가 낮아 개념적 공백 진입이 유리합니다.');
+        else if (score >= 50) strengths.push(`${kws} 관점에서 차별화 가능성이 있습니다.`);
+        else strengths.push('방법론·대상 세분화로 기여 가능합니다.');
+        strengths.push(`유사 논문 ${analysis.matchCount || 0}건 기준 최근 트렌드 확인됨`);
       }
+
+      // 차별화 방향: recommendedAngles 우선
+      const directions = [];
       if (Array.isArray(gap.recommendedAngles) && gap.recommendedAngles.length) {
-        directions.splice(0, directions.length, ...gap.recommendedAngles.slice(0, 3));
+        directions.push(...gap.recommendedAngles.slice(0, 3));
+      } else {
+        directions.push('연구 대상·맥락 조건을 구체화하세요.');
+        directions.push('방법론 차별화 또는 복합 변수 설계를 고려하세요.');
       }
 
       strengthTarget.innerHTML = strengths.map((item) => `<li>${escapeHtml(item)}</li>`).join('');
@@ -3749,12 +3765,12 @@
         const next = yearDist[idx + 1] ? yearDist[idx + 1].count : item.count;
         return ((item.count + next) / 2);
       });
-      const citationSeries = (papers || []).slice(0, 14).map((item) => Number(item.citationCount || 0));
+      const journalSeries = (analysis.recommendedJournals || analysis.recommendedKciJournals || []).slice(0, 14).map((item) => Number(item.count || 0));
 
       renderSparkline('sparkNovelty', noveltySeries, '#bb86fc');
       renderSparkline('sparkPapers', paperSeries, '#03dac6');
       renderSparkline('sparkTrend', trendSeries, '#8f8aff');
-      renderSparkline('sparkCitation', citationSeries.length ? citationSeries : [analysis.expectedCitationIndex || 0], '#70d6ff');
+      renderSparkline('sparkCitation', journalSeries.length ? journalSeries : [analysis.matchCount || 0], '#70d6ff');
     }
 
     function renderSparkline(targetId, values, color) {
@@ -3985,7 +4001,7 @@
       if (!target) return;
       target.innerHTML = '';
       if (!items.length) {
-        target.innerHTML = '<span class="facet-chip">추천 저널 데이터가 아직 충분하지 않습니다.</span>';
+        target.innerHTML = '<span class="facet-chip">투고 참고 저널 데이터가 아직 충분하지 않습니다.</span>';
         return;
       }
 
@@ -3993,13 +4009,14 @@
         const card = document.createElement('article');
         card.className = 'journal-card';
         const initials = String(item.journal || '?').trim().split(/\s+/).slice(0, 2).map((part) => part[0] || '').join('').toUpperCase();
+        const sourceLabel = item.source === 'KCI' ? 'KCI' : (item.source || 'Global Journal');
         card.innerHTML = `
           <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
             <div class="journal-logo">${escapeHtml(initials || 'JR')}</div>
             <span class="facet-chip">추천 ${idx + 1}</span>
           </div>
           <div style="font-size:13px;font-weight:800;color:#e6f1ff;line-height:1.5;">${escapeHtml(item.journal || '저널 정보 없음')}</div>
-          <div style="font-size:11px;color:#8892b0;">주요 분야: 데이터 기반 연구</div>
+          <div style="font-size:11px;color:#8892b0;">출처: ${escapeHtml(sourceLabel)}</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
             <span class="facet-chip">누적 ${escapeHtml(String(item.count || 0))}건</span>
             <span class="facet-chip">최근 ${escapeHtml(String(item.recentCount || 0))}건</span>
@@ -4034,6 +4051,8 @@
     function renderPaperList(papers) {
       const list = document.getElementById('paperList');
       list.innerHTML = '';
+      const listMeta = document.getElementById('paperListMeta');
+      if (listMeta) listMeta.textContent = `유사도 기반 전체 논문 ${papers.length}건`;
 
       if (!papers.length) {
         list.innerHTML = '<div class="paper-item muted" style="text-align:center;">현재 조건에서 직접 비교 가능한 논문을 찾지 못했습니다.</div>';

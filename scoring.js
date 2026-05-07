@@ -7,23 +7,18 @@ const {
 function buildAnalysisReport(cfg, records, meta) {
 	const now = new Date().getFullYear();
 	const minYear = now - cfg.rangeYears + 1;
-	const topicTokens = tokenizeForAnalysis(cfg.topic);
+	// Use translatedTopic (English) for scoring if available, otherwise use cfg.topic
+	const scoringTopic = (meta.translatedTopic && /[^\x00-\x7F]/.test(cfg.topic)) ? meta.translatedTopic : cfg.topic;
+	const topicTokens = tokenizeForAnalysis(scoringTopic);
 	const queryPack = meta.queryPack || {
 		coreKeywordsKo: topicTokens,
 		coreKeywordsEn: []
 	};
 
+	// 필터 없이 연도 범위만 적용 (소스/타입 필터 제거 - 모든 API 결과 포함)
 	const filtered = records.filter((record) => {
 		const yearOk = !record.year || record.year >= minYear;
-		const fieldOk = cfg.field === 'all' || String(record.field || '').includes(cfg.field);
-		const typeLabel = String(record.type || '').toLowerCase();
-		const globalTypeMap = { 'Global Journal': 'journal', 'Pre-print': 'preprint' };
-		const globalType = globalTypeMap[record.source]
-			|| (typeLabel.includes('master') || typeLabel.includes('석사') ? 'master' : (typeLabel.includes('doctor') || typeLabel.includes('박사') ? 'doctor' : 'journal'));
-		const typeOk = (record.source === 'Global Journal' || record.source === 'Pre-print')
-			? cfg.globalTypes.includes(globalType)
-			: cfg.paperTypes.some((selectedType) => String(record.type || '').includes(selectedType));
-		return yearOk && fieldOk && typeOk;
+		return yearOk;
 	});
 
 	const scored = filtered.map((record) => {
@@ -36,10 +31,13 @@ function buildAnalysisReport(cfg, records, meta) {
 			? Math.min(1.05, 1 + Math.log1p(record.citationCount) / 100)
 			: 1.0;
 		const similarity = clampRange((titleScore * 0.52 + keywordScore * 0.33 + abstractScore * 0.15) * sourceWeight * citationBoost, 0, 1);
-		return { ...record, similarity };
+		// fullUrl: doi 우선, url fallback
+		const doi = record.doi || '';
+		const fullUrl = doi ? (doi.startsWith('http') ? doi : `https://doi.org/${doi}`) : (record.url || '');
+		return { ...record, similarity, doi, fullUrl };
 	});
 
-	const relevant = scored.filter((record) => record.similarity >= 0.08 || includesLooseMatchForAnalysis(cfg.topic, record));
+	const relevant = scored.filter((record) => record.similarity >= 0.05 || includesLooseMatchForAnalysis(scoringTopic, record));
 	const sorted = sortRecordsForAnalysis(relevant, cfg.sortOrder);
 	const topPapers = sorted.slice(0, 20);
 	const similarities = topPapers.map((item) => Number(item.similarity || 0)).sort((a, b) => b - a);
@@ -47,34 +45,68 @@ function buildAnalysisReport(cfg, records, meta) {
 	const S_top5_avg = averageNumbers(similarities.slice(0, 5));
 	const S_mixed = (0.6 * S_max) + (0.4 * S_top5_avg);
 
-	let P_S = 1.0;
-	if (S_mixed >= NOVELTY_THRESHOLDS.P_S_HIGH_START) {
-		P_S = Math.max(0, NOVELTY_THRESHOLDS.P_S_MIN_AT_HIGH - (5 * (S_mixed - NOVELTY_THRESHOLDS.P_S_HIGH_START)));
-	} else if (S_mixed >= NOVELTY_THRESHOLDS.P_S_MID_START) {
-		P_S = 1 - (((S_mixed - NOVELTY_THRESHOLDS.P_S_MID_START) / (NOVELTY_THRESHOLDS.P_S_HIGH_START - NOVELTY_THRESHOLDS.P_S_MID_START)) ** 2);
+	// --- 엄격한 유사도 페널티: Exponential Decay ---
+	// S_max >= 0.7 → 즉시 P_S 크게 깎음 (30~40점대 가능)
+	// S_max >= 0.5 → 중간 페널티
+	// S_max < 0.3 → 페널티 거의 없음
+	let P_S;
+	if (S_max >= 0.7) {
+		// 매우 유사한 논문 발견 → 지수 붕괴
+		P_S = Math.max(0.05, Math.exp(-6 * (S_max - 0.5)));
+	} else if (S_max >= 0.5) {
+		// 상당히 유사 → 강한 페널티
+		P_S = Math.max(0.1, 1 - (2.5 * (S_max - 0.3) ** 1.4));
+	} else if (S_max >= 0.3) {
+		// 중간 유사 → 선형 감소
+		P_S = clampRange(1 - (1.8 * (S_max - 0.3)), 0.35, 1.0);
+	} else {
+		// 낮은 유사도 → Top5 평균도 반영
+		P_S = clampRange(1 - (S_mixed * 0.8), 0.6, 1.0);
 	}
+	// 상위 3개 논문 중 1개라도 0.6+ 이면 추가 페널티
+	const top3Count = similarities.slice(0, 3).filter((s) => s >= 0.6).length;
+	if (top3Count >= 2) P_S = Math.min(P_S, 0.25);
+	else if (top3Count === 1) P_S = Math.min(P_S, 0.45);
 
-	const similarPapersForT = scored.filter((paper) => Number(paper.similarity || 0) >= 0.5);
+	const similarPapersForT = scored.filter((paper) => Number(paper.similarity || 0) >= 0.2);
 	const recentThreshold = now - 3;
 	const C_recent = similarPapersForT.filter((paper) => paper.year && paper.year >= recentThreshold).length;
 	const C_total = similarPapersForT.length;
 	let T = 0.85;
 	if (C_total > 0) {
-		const T_raw = Math.exp(-2 * (C_recent / C_total));
-		const T_min = Math.exp(-2);
-		T = clampRange((T_raw - T_min) / (1 - T_min), 0, 1);
+		const ratio = C_recent / C_total;
+		// 최근 논문이 많을수록 T 낮아짐 (더 넓은 범위로 페널티)
+		// ratio=0.8 → T≈0.06, ratio=0.5 → T≈0.37, ratio=0.2 → T≈0.72
+		const T_raw = Math.exp(-3.5 * ratio);
+		// 유사 논문 총 갯수가 많을수록 추가 페널티
+		const volumePenalty = C_total >= 15 ? 0.85 : C_total >= 8 ? 0.92 : 1.0;
+		T = clampRange(T_raw * volumePenalty, 0, 1);
 	}
 
 	const queryKeywords = dedupeStringArray([...(queryPack.coreKeywordsEn || []), ...(queryPack.coreKeywordsKo || [])]).filter((kw) => !ANALYSIS_STOP_WORDS.has(String(kw).toLowerCase()));
 	const K = computePmiKeywordRarity(queryKeywords, relevant);
 	const confidence = calculateConfidence(queryPack, relevant);
-	const N_raw = clampRange(100 * ((0.5 * P_S) + (0.3 * T) + (0.2 * K)), 0, 100);
-	const PENALTY_CAP = 50;
+
+	// 더 엄격한 N_raw: 관련 논문이 매우 많으면 추가 페널티
+	const volumeScorePenalty = relevant.length >= 30 ? 0.80 : relevant.length >= 20 ? 0.90 : 1.0;
+	const N_raw = clampRange(100 * ((0.5 * P_S) + (0.3 * T) + (0.2 * K)) * volumeScorePenalty, 0, 100);
+
+	// 낮은 신뢰도 시 페널티 상한을 높여 점수가 너무 상승하지 않도록
+	const PENALTY_CAP = relevant.length > 5 ? 42 : 50;
 	const noveltyScore = Math.round(clampRange((relevant.length ? ((N_raw * confidence) + (PENALTY_CAP * (1 - confidence))) : PENALTY_CAP), 0, 100) * 10) / 10;
+
+	// 계산 근거 텍스트
+	const calculationLogic = `유사도 페널티(P_S=${P_S.toFixed(2)}, S_max=${S_max.toFixed(2)}) × 0.5 + 시계열 희소성(T=${T.toFixed(2)}, 최근${C_recent}/${C_total}건) × 0.3 + 키워드 희소성(K=${K.toFixed(2)}) × 0.2 → N_raw=${N_raw.toFixed(1)}, 신뢰도=${(confidence*100).toFixed(0)}%, 최종=${noveltyScore}점`;
 
 	const topAvg = averageNumbers(topPapers.map((item) => Number(item.similarity || 0)));
 	const highSimilarityShare = relevant.length ? relevant.filter((item) => Number(item.similarity || 0) >= 0.45).length / relevant.length : 0;
 	const recentShare = relevant.length ? relevant.filter((item) => item.year && item.year >= now - 4).length / relevant.length : 0;
+	// 실제 3년 증가율: 최근 3년(now-2 ~ now) vs 이전 3년(now-5 ~ now-3)
+	const recent3Count = relevant.filter((p) => p.year && p.year >= now - 2).length;
+	const prior3Count = relevant.filter((p) => p.year && p.year >= now - 5 && p.year < now - 2).length;
+	const trendGrowthRate = prior3Count > 0
+		? Math.round(((recent3Count - prior3Count) / prior3Count) * 100)
+		: (recent3Count > 0 ? Math.min(300, recent3Count * 20) : 0);
 	const yearDist = buildAnalysisYearDistribution(relevant, minYear, now);
 	const keywordFreq = extractKeywordFrequencyForAnalysis(relevant, topicTokens).filter((kw) => !ANALYSIS_STOP_WORDS.has(String(kw.keyword).toLowerCase()));
 	const scarcityScore = computeScarcityScore(relevant, topicTokens);
@@ -86,9 +118,10 @@ function buildAnalysisReport(cfg, records, meta) {
 	const preprintCount = relevant.filter((item) => item.source === 'Pre-print').length;
 	const globalCount = globalJournalCount + preprintCount;
 	const rationale = buildNoveltyRationale({ noveltyScore, topAvg, recentShare, scarcityScore, highSimilarityShare, domesticCount, globalCount });
-	const recommendedKciJournals = buildRecommendedKciJournals(topPapers);
+	const recommendedJournals = buildRecommendedJournals(relevant);
+	const recommendedKciJournals = recommendedJournals; // backwards compat
 	const expectedCitationIndex = Math.round((averageNumbers(topPapers.map((paper) => Number(paper.citationCount || 0))) * 0.72) + (noveltyScore * 0.38));
-	const rankedSimilarPapers = rankSimilarPapersForAnalysis(relevant, now, 20);
+	const rankedSimilarPapers = rankSimilarPapersForAnalysis(relevant, now, relevant.length);
 	const searchWarning = confidence < 0.5 ? `검색 신뢰도가 낮습니다 (${Math.round(confidence * 100)}%). 쿼리 확장 또는 범위 확대를 권장합니다.` : null;
 
 	const scoreBreakdown = {
@@ -150,6 +183,8 @@ function buildAnalysisReport(cfg, records, meta) {
 		topPapers,
 		similarPapers: rankedSimilarPapers,
 		recentShare,
+		trendGrowthRate,
+		trendCounts: { recent3Count, prior3Count },
 		yearDist,
 		keywordFreq,
 		domesticCount,
@@ -163,12 +198,14 @@ function buildAnalysisReport(cfg, records, meta) {
 		scarcityScore,
 		creativityScore,
 		expectedCitationIndex,
+		recommendedJournals,
 		recommendedKciJournals,
 		scoreBreakdown,
 		gapAnalysis,
 		reportNarrative,
 		subScores,
 		rationale,
+		calculationLogic,
 		insight: buildAnalysisInsight({ noveltyScore, recentShare, topAvg, domesticCount, globalCount, translatedTopic, keywordFreq, yearDist, highSimilarityShare, scarcityScore })
 	};
 }
@@ -225,6 +262,32 @@ function computeCombinationalCreativity(topic, records, keywordFreq) {
 	return clampRange((noveltyByPair * 0.62) + (keywordNovelty * 0.28) + connectorBonus, 0.08, 0.96);
 }
 
+function buildRecommendedJournals(records) {
+	const journalMap = new Map();
+	records
+		.filter((record) => record.journal)
+		.forEach((record) => {
+			const key = String(record.journal).trim();
+			if (!key) return;
+			const current = journalMap.get(key) || { journal: key, source: record.source || '', count: 0, similarityTotal: 0, recentCount: 0 };
+			current.count += 1;
+			current.similarityTotal += Number(record.similarity || 0);
+			if (record.year && record.year >= new Date().getFullYear() - 2) current.recentCount += 1;
+			journalMap.set(key, current);
+		});
+
+	return Array.from(journalMap.values())
+		.map((item) => ({
+			journal: item.journal,
+			source: item.source,
+			count: item.count,
+			recentCount: item.recentCount,
+			avgSimilarity: item.count ? item.similarityTotal / item.count : 0
+		}))
+		.sort((a, b) => (b.count - a.count) || (b.recentCount - a.recentCount) || (b.avgSimilarity - a.avgSimilarity))
+		.slice(0, 20);
+}
+
 function buildRecommendedKciJournals(records) {
 	const journalMap = new Map();
 	records
@@ -255,10 +318,51 @@ function buildRecommendedKciJournals(records) {
 }
 
 function tokenizeForAnalysis(text) {
-	return Array.from(new Set(String(text || '')
-		.toLowerCase()
-		.replace(/[^\p{L}\p{N}\s-]/gu, ' ')
-		.split(/\s+/)
+	const str = String(text || '').toLowerCase();
+	
+	// 한글 초성·중성·종성 분해 (자모 단위)
+	const decomposeHangul = (char) => {
+		const code = char.charCodeAt(0);
+		if (code < 0xAC00 || code > 0xD7A3) return [char];
+		const index = code - 0xAC00;
+		const cho = Math.floor(index / 588);
+		const joong = Math.floor((index % 588) / 28);
+		const jong = index % 28;
+		const choList = ['ㄱ', 'ㄲ', 'ㄴ', 'ㄷ', 'ㄸ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅃ', 'ㅄ', 'ㅅ', 'ㅆ', 'ㅇ', 'ㅈ', 'ㅉ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ'];
+		const joongList = ['ㅏ', 'ㅑ', 'ㅓ', 'ㅕ', 'ㅗ', 'ㅛ', 'ㅜ', 'ㅠ', 'ㅡ', 'ㅢ', 'ㅣ', 'ㅤ', 'ㅥ', 'ㅦ', 'ㅧ', 'ㅨ', 'ㅩ', 'ㅪ', 'ㅫ', 'ㅬ', 'ㅭ'];
+		const jongList = ['', 'ㄱ', 'ㄲ', 'ㄳ', 'ㄴ', 'ㄵ', 'ㄶ', 'ㄷ', 'ㄹ', 'ㄺ', 'ㄻ', 'ㄼ', 'ㄽ', 'ㄾ', 'ㄿ', 'ㅀ', 'ㅁ', 'ㅂ', 'ㅄ', 'ㅅ', 'ㅆ', 'ㅇ', 'ㅈ', 'ㅉ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ'];
+		return [choList[cho], joongList[joong], jongList[jong]].filter(Boolean);
+	};
+	
+	const tokens = [];
+	let current = '';
+	for (let i = 0; i < str.length; i++) {
+		const char = str[i];
+		if (/[\p{L}\p{N}-]/u.test(char)) {
+			current += char;
+		} else if (current) {
+			tokens.push(current);
+			current = '';
+		}
+	}
+	if (current) tokens.push(current);
+	
+	// 한글 단어는 초성/전체 조합도 추가
+	const expanded = [];
+	tokens.forEach((token) => {
+		expanded.push(token);
+		if (/[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(token)) {
+			let decomposed = '';
+			for (let i = 0; i < token.length; i++) {
+				decomposed += decomposeHangul(token[i]).join('');
+			}
+			if (decomposed !== token) {
+				expanded.push(decomposed);
+			}
+		}
+	});
+	
+	return Array.from(new Set(expanded
 		.map((token) => token.trim())
 		.filter((token) => token.length >= 2)
 		.filter((token) => !ANALYSIS_STOP_WORDS.has(token))));
@@ -389,7 +493,16 @@ function rankSimilarPapersForAnalysis(papers, currentYear, topK) {
 			const recency = Math.max(0, 1 - (age / 20));
 			const citeNorm = Math.log1p(Number(paper.citationCount || 0)) / Math.log1p(maxCitations + 1);
 			const rankScore = (0.5 * Number(paper.similarity || 0)) + (0.25 * recency) + (0.25 * citeNorm);
-			return { ...paper, rankScore: Math.round(rankScore * 10000) / 10000 };
+			const doi = paper.doi || '';
+			const link = paper.fullUrl || (doi ? (doi.startsWith('http') ? doi : `https://doi.org/${doi}`) : (paper.url || ''));
+			return {
+				...paper,
+				doi,
+				link,
+				fullUrl: link,
+				similarityPercent: Math.round(Number(paper.similarity || 0) * 100),
+				rankScore: Math.round(rankScore * 10000) / 10000
+			};
 		})
 		.sort((a, b) => b.rankScore - a.rankScore)
 		.slice(0, topK);
@@ -521,8 +634,17 @@ function buildGapAnalysisReport(options) {
 			year: paper.year,
 			journal: paper.journal,
 			similarity: paper.similarity,
-			rankScore: paper.rankScore
-		}))
+			similarityPercent: Math.round(Number(paper.similarity || 0) * 100),
+			rankScore: paper.rankScore,
+			doi: paper.doi || '',
+			link: paper.link || paper.fullUrl || ''
+		})),
+		// 동적 강점 신호 (opportunitySignals에서 생성된 실제 분석 결과)
+		keySignals: opportunitySignals.length
+			? opportunitySignals.slice(0, 3)
+			: (scarcityScore >= 0.55
+				? ['핵심 키워드 희소성이 높아 개념적 공백 진입 가능', '코퍼스 포화도가 낮아 기여 여지 존재']
+				: ['세부 조건·맥락 변수로 차별화 가능성 있음'])
 	};
 }
 
@@ -582,5 +704,6 @@ module.exports = {
 	averageNumbers,
 	clampRange,
 	buildRecommendedKciJournals,
+	buildRecommendedJournals,
 	buildAnalysisInsight
 };

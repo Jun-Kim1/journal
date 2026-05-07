@@ -98,10 +98,21 @@ const server = http.createServer(async (req, res) => {
 			console.log('[analyze] Reading JSON body...');
 			const body = await readJsonBody(req);
 			console.log('[analyze] Body received:', Object.keys(body));
+			console.log('[analyze] Topic:', body.topic);
+			console.log('[analyze] PaperTypes:', body.paperTypes);
+			console.log('[analyze] GlobalTypes:', body.globalTypes);
 			console.log('[analyze] Starting analysis...');
-			const result = await analyzeTopicSources(body);
-			console.log('[analyze] Analysis complete, sending response...');
-			sendJson(res, 200, { ok: true, ...result });
+			try {
+				const result = await analyzeTopicSources(body);
+				console.log('[analyze] Result data count:', result.data ? result.data.length : 0);
+				console.log('[analyze] Result matchCount:', result.analysis ? result.analysis.matchCount : 0);
+				console.log('[analyze] Result similarPapers count:', result.analysis && result.analysis.similarPapers ? result.analysis.similarPapers.length : 0);
+				console.log('[analyze] Analysis complete, sending response...');
+				sendJson(res, 200, { ok: true, ...result });
+			} catch (error) {
+				console.error('[analyze] ERROR:', error.message);
+				throw error;
+			}
 			return;
 		}
 
@@ -153,13 +164,10 @@ async function analyzeTopicSources(payload) {
 		throw createError(400, '검색할 논문 주제를 입력하세요.');
 	}
 
-	const includeKci = payload.includeKci !== false;
-	const includeCrossref = payload.includeCrossref !== false;
-	const globalTypes = normalizeGlobalTypes(payload.globalTypes, payload.includePreprint === true);
-	const includePreprint = globalTypes.includes('preprint');
-	if (!includeKci && !includeCrossref && !includePreprint) {
-		throw createError(400, '최소 하나의 데이터 소스를 선택하세요.');
-	}
+	const includeKci = true; // 항상 모든 소스 수집
+	const includeCrossref = true;
+	const globalTypes = ['journal', 'preprint'];
+	const includePreprint = true;
 
 	const rangeYears = clampNumber(payload.rangeYears, 5, 3, 15);
 	const currentYear = new Date().getFullYear();
@@ -167,12 +175,19 @@ async function analyzeTopicSources(payload) {
 	const untilYear = currentYear;
 	const pageSize = clampNumber(payload.pageSize, 80, 20, 200);
 	const field = String(payload.field || 'all');
-	const paperTypes = Array.isArray(payload.paperTypes) && payload.paperTypes.length ? payload.paperTypes : ['학술지'];
+	
+	// 기본값 설정: paperTypes와 globalTypes가 비어있으면 기본값 사용
+	let paperTypes = Array.isArray(payload.paperTypes) && payload.paperTypes.length ? payload.paperTypes : ['학술지'];
+	let globalTypesResult = globalTypes && globalTypes.length ? globalTypes : ['journal'];
+	
 	const serviceKey = KCI_CONFIG.defaultServiceKey;
 	const serviceKeyMode = String(payload.serviceKeyMode || 'auto');
 	const nanetApiKey = NANET_CONFIG.apiKey;
 	const openAlexApiKey = OPENALEX_CONFIG.apiKey;
 	const openAlexMailto = OPENALEX_CONFIG.mailto;
+
+	console.log('[analyze] Final paperTypes:', paperTypes);
+	console.log('[analyze] Final globalTypes:', globalTypesResult);
 
 	const queryPack = await buildQueryPack(topic);
 	const translatedTopic = queryPack.translatedTopic;
@@ -268,6 +283,11 @@ async function analyzeTopicSources(payload) {
 	const arxivResult = settled[4].status === 'fulfilled'
 		? settled[4].value
 		: handleSourceFailure('arXiv', settled[4].reason, warnings);
+	
+	console.log(`[sources] KCI: ${kciResult.data ? kciResult.data.length : 0}, NANET: ${nanetResult.data ? nanetResult.data.length : 0}, OpenAlex: ${openAlexResult.data ? openAlexResult.data.length : 0}, Crossref: ${crossrefResult.data ? crossrefResult.data.length : 0}, arXiv: ${arxivResult.data ? arxivResult.data.length : 0}`);
+	if (warnings.length > 0) {
+		console.log('[sources] Warnings:', warnings);
+	}
 	const mergedDomestic = mergeDomesticSources(kciResult.data, nanetResult.data);
 	const mergedGlobal = mergeGlobalSources(openAlexResult.data, crossrefResult.data, arxivResult.data);
 	const merged = improvedDedupeByIdentifiers([...mergedDomestic, ...mergedGlobal]);
@@ -280,8 +300,8 @@ async function analyzeTopicSources(payload) {
 		includeKci,
 		includeCrossref,
 		includePreprint,
-		paperTypes,
-		globalTypes,
+		paperTypes: paperTypes,
+		globalTypes: globalTypesResult,
 		sortOrder: String(payload.sortOrder || 'latest')
 	}, merged, {
 		queryPack,
@@ -785,13 +805,36 @@ function buildGlobalQueryText(topic, translatedTopic) {
 
 async function buildQueryPack(topic) {
 	const primaryQueryKo = String(topic || '').trim();
-	const translatedTopic = await translateTopicToEnglish(primaryQueryKo);
+	
+	// 병렬로 전부 실행하되, timeout으로 빠르게 실패하게 함
+	const [translatedTopic, coreKeywordsKo] = await Promise.all([
+		translateTopicToEnglish(primaryQueryKo),
+		Promise.resolve(extractCoreKeywords(primaryQueryKo))
+	]);
+	
 	const baseEnglishQuery = buildGlobalQueryText(primaryQueryKo, translatedTopic);
-	const coreKeywordsKo = extractCoreKeywords(primaryQueryKo);
-	const expansionTargets = coreKeywordsKo.slice(0, LLM_EXPANSION_CONFIG.maxKeywordCount);
-	const keywordExpansions = await Promise.all(expansionTargets.map((keyword) => resolveAcademicKeywordExpansion(keyword)));
+	const expansionTargets = coreKeywordsKo.slice(0, 2); // 최대 2개만 확장
+	
+	// 병렬 확장 - 실패 안전
+	const keywordExpansions = await Promise.allSettled(
+		expansionTargets.map((keyword) => 
+			Promise.race([
+				resolveAcademicKeywordExpansion(keyword),
+				new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000))
+			])
+		)
+	).then(results => 
+		results.map(r => r.status === 'fulfilled' ? r.value : {
+			keyword: '',
+			source: 'fallback',
+			synonyms: [],
+			entities: [],
+			fallbackTranslation: ''
+		})
+	);
+	
 	const coreKeywordsEn = dedupeStringArray(keywordExpansions.flatMap((item) => [
-		...(item.synonyms || []).slice(0, 2),
+		...(item.synonyms || []).slice(0, 1),
 		...(item.entities || []).slice(0, 1),
 		item.fallbackTranslation || ''
 	]));
@@ -801,13 +844,10 @@ async function buildQueryPack(topic) {
 		...coreKeywordsEn.flatMap((item) => String(item).split(/\s+/))
 	]).slice(0, 24).join(' ') || baseEnglishQuery || primaryQueryKo;
 
+	// 확장 쿼리 생성을 단순화
 	const expandedQueries = [];
-	for (const expansion of keywordExpansions) {
-		for (const alternative of (expansion.entities || []).slice(0, 3)) {
-			expandedQueries.push(dedupeStringArray([...tokenizeEnglish(primaryQueryEn), ...alternative.split(/\s+/)]).slice(0, 24).join(' '));
-		}
-
-		for (const alternative of (expansion.synonyms || []).slice(1, 3)) {
+	for (const expansion of keywordExpansions.slice(0, 1)) {
+		for (const alternative of (expansion.entities || []).slice(0, 2)) {
 			expandedQueries.push(dedupeStringArray([...tokenizeEnglish(primaryQueryEn), ...alternative.split(/\s+/)]).slice(0, 24).join(' '));
 		}
 	}
@@ -817,12 +857,12 @@ async function buildQueryPack(topic) {
 		primaryQueryEn,
 		translatedTopic,
 		globalQueryTopic: primaryQueryEn,
-		expandedQueries: dedupeStringArray(expandedQueries.filter(Boolean)).filter((query) => query && query !== primaryQueryEn).slice(0, 5),
-		coreKeywordsKo,
+		expandedQueries: dedupeStringArray(expandedQueries.filter(Boolean)).filter((query) => query && query !== primaryQueryEn).slice(0, 3),
+		coreKeywordsKo: coreKeywordsKo.slice(0, 2),
 		coreKeywordsEn: dedupeStringArray(coreKeywordsEn),
 		keywordExpansionSources: keywordExpansions.map((item) => ({
-			keyword: item.keyword,
-			source: item.source,
+			keyword: item.keyword || '',
+			source: item.source || 'fallback',
 			synonymCount: (item.synonyms || []).length,
 			entityCount: (item.entities || []).length
 		}))
@@ -948,12 +988,12 @@ async function fetchJsonWithRetries(url, options) {
 	const { headers = {}, errorContext = 'Request' } = options || {};
 	let lastError = null;
 
-	for (let attempt = 0; attempt < 3; attempt += 1) {
+	for (let attempt = 0; attempt < 2; attempt += 1) {
 		try {
 			const response = await fetch(url, {
 				method: 'GET',
 				headers,
-				signal: AbortSignal.timeout(20000)
+				signal: AbortSignal.timeout(8000) // 20초 → 8초
 			});
 
 			if (response.status === 429) {
@@ -972,10 +1012,10 @@ async function fetchJsonWithRetries(url, options) {
 			return response.json();
 		} catch (error) {
 			lastError = error;
-			if (!shouldRetry(error) || attempt === 2) {
+			if (!shouldRetry(error) || attempt === 1) {
 				throw error;
 			}
-			await wait(400 * (attempt + 1));
+			await wait(200);
 		}
 	}
 
@@ -987,11 +1027,11 @@ async function postJsonWithRetries(url, options) {
 		headers = {},
 		body = {},
 		errorContext = 'Request',
-		timeoutMs = 20000
+		timeoutMs = 5000  // 20초 → 5초
 	} = options || {};
 	let lastError = null;
 
-	for (let attempt = 0; attempt < 3; attempt += 1) {
+	for (let attempt = 0; attempt < 2; attempt += 1) {
 		try {
 			const response = await fetch(url, {
 				method: 'POST',
@@ -1016,10 +1056,10 @@ async function postJsonWithRetries(url, options) {
 			return response.json();
 		} catch (error) {
 			lastError = error;
-			if (!shouldRetry(error) || attempt === 2) {
+			if (!shouldRetry(error) || attempt === 1) {
 				throw error;
 			}
-			await wait(400 * (attempt + 1));
+			await wait(200);
 		}
 	}
 
@@ -1836,6 +1876,22 @@ function readJsonBody(req) {
 		req.on('error', reject);
 	});
 }
+
+const MIME_TYPES = {
+	'.html': 'text/html; charset=utf-8',
+	'.css': 'text/css',
+	'.js': 'application/javascript',
+	'.json': 'application/json',
+	'.png': 'image/png',
+	'.jpg': 'image/jpeg',
+	'.jpeg': 'image/jpeg',
+	'.gif': 'image/gif',
+	'.svg': 'image/svg+xml',
+	'.woff': 'font/woff',
+	'.woff2': 'font/woff2',
+	'.ttf': 'font/ttf',
+	'.eot': 'application/vnd.ms-fontobject'
+};
 
 function serveFile(filePath, res) {
 	const ext = path.extname(filePath);
