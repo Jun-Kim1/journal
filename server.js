@@ -108,7 +108,44 @@ const ENTITY_SUBSTITUTION_MAP = {
 	'환자': ['patient', 'clinical population', 'care recipient', 'hospitalized patient', 'outpatient'],
 	'의사': ['physician', 'doctor', 'clinician', 'medical practitioner', 'healthcare provider'],
 	'간호사': ['nurse', 'nursing staff', 'healthcare worker', 'registered nurse', 'clinical nurse'],
-	function buildAnalysisReport(cfg, records, meta) {
+};
+
+/**
+ * P_S 유사도 패널티 임계값 상수
+ * @see https://doi.org/... (조정 근거 문서 또는 실험 노트 링크 예정)
+ */
+const NOVELTY_THRESHOLDS = {
+	/** @see https://doi.org/... 이 이상이면 매우 유사 → 강한 패널티 */
+	P_S_HIGH_START: 0.85,
+	/** @see https://doi.org/... 이 이상이면 중간 패널티 시작 */
+	P_S_MID_START: 0.40,
+	/** @see https://doi.org/... HIGH 구간 시작 시 P_S 최솟값 */
+	P_S_MIN_AT_HIGH: 0.15,
+};
+
+/** 통합 불용어 Set (한글/영어) — tokenizeForAnalysis, buildAnalysisReport, extractKeywordFrequencyForAnalysis에서 공유 */
+const ANALYSIS_STOP_WORDS = new Set([
+	'연구', '분석', '고찰', '효과', '영향', '중심', '기반', '활용', '개발',
+	'탐색', '비교', '검증', '대한', '에서', '위한', '및',
+	'the', 'and', 'for', 'with', 'using', 'based', 'study', 'analysis',
+	'approach', 'model', 'models', 'of', 'on', 'in', 'to', 'by', 'is', 'as',
+	'an', 'a', 'at', 'from', 'this', 'that', 'it', 'be', 'are', 'or', 'was',
+	'were', 'has', 'have', 'had', 'but', 'not', 'can', 'will', 'which',
+	'their', 'its', 'these', 'those', 'such', 'into', 'between', 'among',
+	'through', 'after', 'before', 'about', 'more', 'other', 'new', 'also',
+	'than', 'been', 'may', 'one', 'two', 'three', 'four', 'five', 'six',
+	'seven', 'eight', 'nine', 'ten'
+]);
+
+/** 4단계 참신성 레이블 */
+const NOVELTY_LABELS = [
+	{ min: 78, label: '매우 참신함',    tone: 'high',        summary: '중복 연구 밀도가 낮고 희소성이 높습니다.' },
+	{ min: 62, label: '차별화 가능',    tone: 'medium-high', summary: '핵심 변수나 대상 집단을 좁히면 충분히 독창적입니다.' },
+	{ min: 45, label: '선행연구 존재',  tone: 'medium',      summary: '유사 연구가 있으나 방법론 차별화로 기여 가능합니다.' },
+	{ min: 0,  label: '기존 연구 다수', tone: 'low',         summary: '유사 주제 연구가 많아 차별화 설계가 필수입니다.' },
+];
+
+function buildAnalysisReport(cfg, records, meta) {
 		const now = new Date().getFullYear();
 		const minYear = now - cfg.rangeYears + 1;
 		const topicTokens = tokenizeForAnalysis(cfg.topic);
@@ -116,12 +153,6 @@ const ENTITY_SUBSTITUTION_MAP = {
 			coreKeywordsKo: topicTokens,
 			coreKeywordsEn: []
 		};
-
-		// 불용어 리스트 (한글/영어)
-		const stopWords = new Set([
-			'연구','분석','고찰','효과','영향','중심','기반','활용','개발','탐색','비교','검증','대한','에서','위한','및',
-			'the','and','for','with','using','based','study','analysis','approach','model','models','of','on','in','to','by','is','as','an','a','at','from','this','that','it','be','are','or','was','were','has','have','had','but','not','can','will','which','their','its','these','those','such','into','between','among','through','after','before','about','more','other','new','also','than','been','may','one','two','three','four','five','six','seven','eight','nine','ten'
-		]);
 
 		// 필터/스코어링
 		const filtered = records.filter((record) => {
@@ -141,11 +172,14 @@ const ENTITY_SUBSTITUTION_MAP = {
 		const scored = filtered.map((record) => {
 			const titleScore = overlapScoreForAnalysis(topicTokens, tokenizeForAnalysis(record.title));
 			// 키워드에서 불용어 제거
-			const filteredKeywords = (record.keywords || []).filter((kw) => !stopWords.has(String(kw).toLowerCase()));
+			const filteredKeywords = (record.keywords || []).filter((kw) => !ANALYSIS_STOP_WORDS.has(String(kw).toLowerCase()));
 			const keywordScore = overlapScoreForAnalysis(topicTokens, tokenizeForAnalysis(filteredKeywords.join(' ')));
 			const abstractScore = overlapScoreForAnalysis(topicTokens, tokenizeForAnalysis(record.abstract));
 			const sourceWeight = (record.source === 'Global Journal' || record.source === 'Pre-print') ? 1.03 : 1;
-			const similarity = clampRange((titleScore * 0.52 + keywordScore * 0.33 + abstractScore * 0.15) * sourceWeight, 0, 1);
+			const citationBoost = cfg.useCitationBoost && record.citationCount > 0
+				? Math.min(1.05, 1 + Math.log1p(record.citationCount) / 100)
+				: 1.0;
+			const similarity = clampRange((titleScore * 0.52 + keywordScore * 0.33 + abstractScore * 0.15) * sourceWeight * citationBoost, 0, 1);
 			return { ...record, similarity };
 		});
 
@@ -159,10 +193,10 @@ const ENTITY_SUBSTITUTION_MAP = {
 		const S_mixed = (0.6 * S_max) + (0.4 * S_top5_avg);
 
 		let P_S = 1.0;
-		if (S_mixed >= 0.85) {
-			P_S = Math.max(0, 0.15 - (5 * (S_mixed - 0.85)));
-		} else if (S_mixed >= 0.40) {
-			P_S = 1 - (((S_mixed - 0.40) / 0.60) ** 2);
+		if (S_mixed >= NOVELTY_THRESHOLDS.P_S_HIGH_START) {
+			P_S = Math.max(0, NOVELTY_THRESHOLDS.P_S_MIN_AT_HIGH - (5 * (S_mixed - NOVELTY_THRESHOLDS.P_S_HIGH_START)));
+		} else if (S_mixed >= NOVELTY_THRESHOLDS.P_S_MID_START) {
+			P_S = 1 - (((S_mixed - NOVELTY_THRESHOLDS.P_S_MID_START) / (NOVELTY_THRESHOLDS.P_S_HIGH_START - NOVELTY_THRESHOLDS.P_S_MID_START)) ** 2);
 		}
 
 		const similarPapersForT = scored.filter((paper) => Number(paper.similarity || 0) >= 0.5);
@@ -171,13 +205,14 @@ const ENTITY_SUBSTITUTION_MAP = {
 		const C_total = similarPapersForT.length;
 		let T = 0.85;
 		if (C_total > 0) {
-			const T_raw = Math.exp(-2 * (C_recent / (C_total + 1)));
+			// C_total > 0이 보장되므로 +1 스무딩 불필요 — 소량 문헌 시 정확도 향상
+			const T_raw = Math.exp(-2 * (C_recent / C_total));
 			const T_min = Math.exp(-2);
 			T = clampRange((T_raw - T_min) / (1 - T_min), 0, 1);
 		}
 
 		// 키워드 집계 (불용어 제거)
-		const queryKeywords = dedupeStringArray([...(queryPack.coreKeywordsEn || []), ...(queryPack.coreKeywordsKo || [])]).filter((kw) => !stopWords.has(String(kw).toLowerCase()));
+		const queryKeywords = dedupeStringArray([...(queryPack.coreKeywordsEn || []), ...(queryPack.coreKeywordsKo || [])]).filter((kw) => !ANALYSIS_STOP_WORDS.has(String(kw).toLowerCase()));
 		const K = computePmiKeywordRarity(queryKeywords, relevant);
 		const confidence = calculateConfidence(queryPack, relevant);
 		const N_raw = clampRange(100 * ((0.5 * P_S) + (0.3 * T) + (0.2 * K)), 0, 100);
@@ -189,7 +224,7 @@ const ENTITY_SUBSTITUTION_MAP = {
 		const recentShare = relevant.length ? relevant.filter((item) => item.year && item.year >= now - 4).length / relevant.length : 0;
 		const yearDist = buildAnalysisYearDistribution(relevant, minYear, now);
 		// 키워드 빈도 (불용어 제거)
-		const keywordFreq = extractKeywordFrequencyForAnalysis(relevant, topicTokens).filter((kw) => !stopWords.has(String(kw.keyword).toLowerCase()));
+		const keywordFreq = extractKeywordFrequencyForAnalysis(relevant, topicTokens).filter((kw) => !ANALYSIS_STOP_WORDS.has(String(kw.keyword).toLowerCase()));
 		const scarcityScore = computeScarcityScore(relevant, topicTokens);
 		const creativityScore = computeCombinationalCreativity(cfg.topic, relevant, keywordFreq);
 		const verdict = classifyNovelty(noveltyScore, S_max);
@@ -288,6 +323,27 @@ const ENTITY_SUBSTITUTION_MAP = {
 			insight: buildAnalysisInsight({ noveltyScore, recentShare, topAvg, domesticCount, globalCount, translatedTopic, keywordFreq, yearDist, highSimilarityShare, scarcityScore })
 		};
 	}
+
+const server = http.createServer(async (req, res) => {
+	setCorsHeaders(req, res);
+	if (req.method === 'OPTIONS') {
+		res.writeHead(204);
+		res.end();
+		return;
+	}
+	const requestUrl = new URL(req.url, 'http://' + (req.headers.host || 'localhost'));
+	try {
+		if (req.method === 'GET' && (requestUrl.pathname === '/' || requestUrl.pathname === '/index.html')) {
+			serveFile(STATIC_FILE, res);
+			return;
+		}
+
+		if (req.method === 'POST' && requestUrl.pathname === '/api/analyze') {
+			const body = await readJsonBody(req);
+			const result = await analyzeTopicSources(body);
+			sendJson(res, 200, { ok: true, ...result });
+			return;
+		}
 
 		if (req.method === 'POST' && requestUrl.pathname === '/api/nanet/article-trend') {
 			const body = await readJsonBody(req);
@@ -516,6 +572,7 @@ async function analyzeTopicSources(payload) {
 function calculateConfidence(queryPack, papers) {
 	const N_EXPECTED = 20;
 	const countConfidence = Math.min(1.0, papers.length / N_EXPECTED);
+
 	const allCorpusKws = new Set();
 	papers.forEach((paper) => {
 		(paper.keywords || []).forEach((keyword) => allCorpusKws.add(String(keyword).toLowerCase()));
@@ -530,163 +587,13 @@ function calculateConfidence(queryPack, papers) {
 		? queryKeywords.filter((keyword) => allCorpusKws.has(keyword)).length / queryKeywords.length
 		: 0.5;
 
-	return Math.round(clampRange(countConfidence * keywordCoverage, 0.05, 1.0) * 1000) / 1000;
-}
+	// 소스 다양성: KCI, Global Journal, Pre-print 세 종류 기준 0~1 정규화
+	const uniqueSources = new Set(papers.map((paper) => paper.source || 'unknown')).size;
+	const sourceVariety = Math.min(1, uniqueSources / 3);
 
-function buildAnalysisReport(cfg, records, meta) {
-	const now = new Date().getFullYear();
-	const minYear = now - cfg.rangeYears + 1;
-	const topicTokens = tokenizeForAnalysis(cfg.topic);
-	const queryPack = meta.queryPack || {
-		coreKeywordsKo: topicTokens,
-		coreKeywordsEn: []
-	};
-
-	const filtered = records.filter((record) => {
-		const yearOk = !record.year || record.year >= minYear;
-		const fieldOk = cfg.field === 'all' || String(record.field || '').includes(cfg.field);
-		const typeLabel = String(record.type || '').toLowerCase();
-		const globalTypeMap = { 'Global Journal': 'journal', 'Pre-print': 'preprint' };
-		const globalType = globalTypeMap[record.source]
-			|| (typeLabel.includes('master') || typeLabel.includes('석사') ? 'master' : (typeLabel.includes('doctor') || typeLabel.includes('박사') ? 'doctor' : 'journal'));
-
-		const typeOk = (record.source === 'Global Journal' || record.source === 'Pre-print')
-			? cfg.globalTypes.includes(globalType)
-			: cfg.paperTypes.some((selectedType) => String(record.type || '').includes(selectedType));
-
-		return yearOk && fieldOk && typeOk;
-	});
-
-	const scored = filtered.map((record) => {
-		const titleScore = overlapScoreForAnalysis(topicTokens, tokenizeForAnalysis(record.title));
-		const keywordScore = overlapScoreForAnalysis(topicTokens, tokenizeForAnalysis((record.keywords || []).join(' ')));
-		const abstractScore = overlapScoreForAnalysis(topicTokens, tokenizeForAnalysis(record.abstract));
-		const sourceWeight = (record.source === 'Global Journal' || record.source === 'Pre-print') ? 1.03 : 1;
-		const similarity = clampRange((titleScore * 0.52 + keywordScore * 0.33 + abstractScore * 0.15) * sourceWeight, 0, 1);
-		return { ...record, similarity };
-	});
-
-	const relevant = scored.filter((record) => record.similarity >= 0.08 || includesLooseMatchForAnalysis(cfg.topic, record));
-	const sorted = sortRecordsForAnalysis(relevant, cfg.sortOrder);
-	const topPapers = sorted.slice(0, 20);
-	const similarities = topPapers.map((item) => Number(item.similarity || 0)).sort((a, b) => b - a);
-	const S_max = similarities[0] || 0;
-	const S_top5_avg = averageNumbers(similarities.slice(0, 5));
-	const S_mixed = (0.6 * S_max) + (0.4 * S_top5_avg);
-
-	let P_S = 1.0;
-	if (S_mixed >= 0.85) {
-		P_S = Math.max(0, 0.15 - (5 * (S_mixed - 0.85)));
-	} else if (S_mixed >= 0.40) {
-		P_S = 1 - (((S_mixed - 0.40) / 0.60) ** 2);
-	}
-
-	const similarPapersForT = scored.filter((paper) => Number(paper.similarity || 0) >= 0.5);
-	const recentThreshold = now - 3;
-	const C_recent = similarPapersForT.filter((paper) => paper.year && paper.year >= recentThreshold).length;
-	const C_total = similarPapersForT.length;
-	let T = 0.85;
-	if (C_total > 0) {
-		const T_raw = Math.exp(-2 * (C_recent / (C_total + 1)));
-		const T_min = Math.exp(-2);
-		T = clampRange((T_raw - T_min) / (1 - T_min), 0, 1);
-	}
-
-	const queryKeywords = dedupeStringArray([...(queryPack.coreKeywordsEn || []), ...(queryPack.coreKeywordsKo || [])]);
-	const K = computePmiKeywordRarity(queryKeywords, relevant);
-	const confidence = calculateConfidence(queryPack, relevant);
-	const N_raw = clampRange(100 * ((0.5 * P_S) + (0.3 * T) + (0.2 * K)), 0, 100);
-	const PENALTY_CAP = 50;
-	const noveltyScore = Math.round(clampRange((relevant.length ? ((N_raw * confidence) + (PENALTY_CAP * (1 - confidence))) : PENALTY_CAP), 0, 100) * 10) / 10;
-
-	const topAvg = averageNumbers(topPapers.map((item) => Number(item.similarity || 0)));
-	const highSimilarityShare = relevant.length ? relevant.filter((item) => Number(item.similarity || 0) >= 0.45).length / relevant.length : 0;
-	const recentShare = relevant.length ? relevant.filter((item) => item.year && item.year >= now - 4).length / relevant.length : 0;
-	const yearDist = buildAnalysisYearDistribution(relevant, minYear, now);
-	const keywordFreq = extractKeywordFrequencyForAnalysis(relevant, topicTokens);
-	const scarcityScore = computeScarcityScore(relevant, topicTokens);
-	const creativityScore = computeCombinationalCreativity(cfg.topic, relevant, keywordFreq);
-	const verdict = classifyNovelty(noveltyScore, S_max);
-	const translatedTopic = meta.globalQueryTopic || meta.translatedTopic || cfg.topic;
-	const domesticCount = meta.domesticCount || 0;
-	const globalCount = meta.globalCount || 0;
-	const rationale = buildNoveltyRationale({ noveltyScore, topAvg, recentShare, scarcityScore, highSimilarityShare, domesticCount, globalCount });
-	const recommendedKciJournals = buildRecommendedKciJournals(topPapers);
-	const expectedCitationIndex = Math.round((averageNumbers(topPapers.map((paper) => Number(paper.citationCount || 0))) * 0.72) + (noveltyScore * 0.38));
-	const rankedSimilarPapers = rankSimilarPapersForAnalysis(relevant, now, 20);
-	const searchWarning = confidence < 0.5 ? `검색 신뢰도가 낮습니다 (${Math.round(confidence * 100)}%). 쿼리 확장 또는 범위 확대를 권장합니다.` : null;
-	const gapAnalysis = buildGapAnalysisReport({
-		cfg,
-		noveltyScore,
-		confidence,
-		topAvg,
-		recentShare,
-		highSimilarityShare,
-		scarcityScore,
-		creativityScore,
-		queryPack,
-		keywordFreq,
-		yearDist,
-		similarPapers: rankedSimilarPapers,
-		translatedTopic,
-		matchCount: relevant.length
-	});
-	const reportNarrative = buildSpecReportNarrative({
-		cfg,
-		noveltyScore,
-		confidence,
-		verdict,
-		translatedTopic,
-		topAvg,
-		recentShare,
-		highSimilarityShare,
-		gapAnalysis,
-		keywordFreq,
-		matchCount: relevant.length
-	});
-
-	return {
-		noveltyScore,
-		verdict,
-		verdictTone: verdict.tone,
-		verdictLabel: verdict.label,
-		verdictSummary: verdict.summary,
-		confidence,
-		searchWarning,
-		topAvg,
-		topPapers,
-		similarPapers: rankedSimilarPapers,
-		recentShare,
-		yearDist,
-		keywordFreq,
-		domesticCount,
-		globalCount,
-		translatedTopic,
-		reportScope: `최근 ${cfg.rangeYears}년 기준 · 총 ${relevant.length}건 분석`,
-		sourceSummary: `국내 저널 ${domesticCount}건 · 해외 저널 ${relevant.filter((item) => item.source === 'Global Journal').length}건 · 프리프린트 ${relevant.filter((item) => item.source === 'Pre-print').length}건`,
-		matchCount: relevant.length,
-		highSimilarityShare,
-		scarcityScore,
-		creativityScore,
-		expectedCitationIndex,
-		recommendedKciJournals,
-		scoreBreakdown: {
-			similarity: Math.round(P_S * 100),
-			trend: Math.round(T * 100),
-			scarcity: Math.round(K * 100),
-			creativity: Math.round(creativityScore * 100)
-		},
-		gapAnalysis,
-		reportNarrative,
-		subScores: {
-			similarityPenalty: { S_max, S_top5_avg, S_mixed, P_S, weight: 0.5 },
-			temporalSparsity: { C_recent, C_total, T_score: T, weight: 0.3 },
-			keywordRarity: { K_score: K, weight: 0.2 },
-			confidence
-		},
-		rationale,
-		insight: buildAnalysisInsight({ noveltyScore, recentShare, topAvg, domesticCount, globalCount, translatedTopic, keywordFreq, yearDist, highSimilarityShare, scarcityScore })
-	};
+	// 곱셈 대신 가중 평균 — 단일 요소가 낮아도 극단적으로 낮아지지 않음
+	const confidence = (countConfidence * 0.5) + (keywordCoverage * 0.3) + (sourceVariety * 0.2);
+	return Math.round(clampRange(confidence, 0.05, 1.0) * 1000) / 1000;
 }
 
 function handleSourceFailure(sourceName, error, warnings) {
@@ -2297,28 +2204,23 @@ async function searchArxivPapers(options) {
 }
 
 function tokenizeForAnalysis(text) {
-	const commonStopWords = new Set([
-		'연구', '분석', '고찰', '효과', '영향', '중심', '기반', '활용', '개발', '탐색', '비교', '검증', '대한',
-		'에서', '위한', '및', 'the', 'and', 'for', 'with', 'using', 'based', 'study', 'analysis', 'approach', 'model', 'models'
-	]);
-
 	return Array.from(new Set(String(text || '')
 		.toLowerCase()
 		.replace(/[^\p{L}\p{N}\s-]/gu, ' ')
 		.split(/\s+/)
 		.map((token) => token.trim())
 		.filter((token) => token.length >= 2)
-		.filter((token) => !commonStopWords.has(token))));
+		.filter((token) => !ANALYSIS_STOP_WORDS.has(token))));
 }
 
 function overlapScoreForAnalysis(baseTokens, targetTokens) {
-	if (!baseTokens.length || !targetTokens.length) {
-		return 0;
-	}
+	if (!baseTokens.length || !targetTokens.length) return 0;
 	const targetSet = new Set(targetTokens);
-	const intersectionCount = baseTokens.filter((token) => targetSet.has(token)).length;
-	const unionSize = new Set([...baseTokens, ...targetTokens]).size;
-	return unionSize ? intersectionCount / unionSize : 0;
+	const matchCount = baseTokens.filter((token) => targetSet.has(token)).length;
+	// Jaccard + Recall(쿼리 기준 재현율) 평균 — 긴 초록에서도 쿼리 매칭 비율이 공정하게 반영됨
+	const jaccard = matchCount / new Set([...baseTokens, ...targetTokens]).size;
+	const recall = matchCount / baseTokens.length;
+	return (jaccard * 0.5) + (recall * 0.5);
 }
 
 function includesLooseMatchForAnalysis(topic, record) {
@@ -2391,6 +2293,7 @@ function extractKeywordFrequencyForAnalysis(records, topicTokens) {
 			if (!normalized || normalized.length < 2 || topicTokens.includes(normalized)) {
 				return;
 			}
+			if (ANALYSIS_STOP_WORDS.has(normalized)) return;
 			map.set(normalized, (map.get(normalized) || 0) + 1);
 		});
 	});
@@ -2419,9 +2322,9 @@ function computeScarcityScore(records, topicTokens) {
 
 function computePmiKeywordRarity(keywords, papers) {
 	const uniqueKeywords = dedupeStringArray(keywords || []).map((keyword) => String(keyword).toLowerCase()).filter(Boolean);
-	if (uniqueKeywords.length < 2) {
-		return 0.5;
-	}
+	if (uniqueKeywords.length < 2) return 0.5;
+	// 논문이 너무 적으면 PMI 계산이 무의미함
+	if (papers.length < 5) return 0.5;
 
 	const corpusSize = (papers.length || 0) + 1;
 	const countWith = (keyword) => papers.filter((paper) => (paper.keywords || []).some((item) => String(item).toLowerCase().includes(keyword))).length + 1;
@@ -2430,18 +2333,23 @@ function computePmiKeywordRarity(keywords, papers) {
 		return lowerKeywords.some((item) => item.includes(left)) && lowerKeywords.some((item) => item.includes(right));
 	}).length + 1;
 
-	const pmiValues = [];
+	const npmiValues = [];
 	for (let i = 0; i < uniqueKeywords.length; i += 1) {
 		for (let j = i + 1; j < uniqueKeywords.length; j += 1) {
 			const P_i = countWith(uniqueKeywords[i]) / corpusSize;
 			const P_j = countWith(uniqueKeywords[j]) / corpusSize;
 			const P_ij = countWithBoth(uniqueKeywords[i], uniqueKeywords[j]) / corpusSize;
-			pmiValues.push(Math.log2(P_ij / ((P_i * P_j) + 1e-9)));
+			// Normalized PMI — 엡실론을 1e-6으로 확대해 극단값 방지
+			const rawPMI = Math.log2(P_ij / ((P_i * P_j) + 1e-6));
+			const normFactor = -Math.log2(P_ij + 1e-6);
+			const npmi = normFactor > 0 ? rawPMI / normFactor : 0;
+			npmiValues.push(clampRange(npmi, -1, 1));
 		}
 	}
 
-	const meanPmi = averageNumbers(pmiValues);
-	return Math.round(clampRange(1 / (1 + Math.exp(meanPmi)), 0, 1) * 10000) / 10000;
+	// meanNpmi가 높을수록(공출현 잦음) K는 낮아짐 (희귀도 낮음)
+	const meanNpmi = averageNumbers(npmiValues);
+	return Math.round(clampRange((1 - meanNpmi) / 2, 0, 1) * 10000) / 10000;
 }
 
 function rankSimilarPapersForAnalysis(papers, currentYear, topK) {
@@ -2459,13 +2367,7 @@ function rankSimilarPapersForAnalysis(papers, currentYear, topK) {
 }
 
 function classifyNovelty(score) {
-	if (score >= 78) {
-		return { label: '매우 참신함', tone: 'high', summary: '중복 연구 밀도가 낮고 희소성이 높습니다.' };
-	}
-	if (score >= 55) {
-		return { label: '보통', tone: 'medium', summary: '선행연구는 있으나 차별화 가능한 구간입니다.' };
-	}
-	return { label: '기존 연구 다수', tone: 'low', summary: '유사 주제 연구가 많아 차별화 설계가 중요합니다.' };
+	return NOVELTY_LABELS.find((l) => score >= l.min) || NOVELTY_LABELS[NOVELTY_LABELS.length - 1];
 }
 
 function buildNoveltyRationale(options) {
