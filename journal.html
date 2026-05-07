@@ -8,30 +8,30 @@
     @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@200..800&family=Pretendard:wght@400;500;600;700&display=swap');
 
     :root {
-      --base: #06070c;
-      --surface: #0c1020;
-      --bg-card: #0f1428;
-      --text-primary: #eef3ff;
-      --text-secondary: rgba(206, 219, 246, 0.78);
-      --text-muted: rgba(143, 157, 190, 0.64);
-      --text-hint: rgba(126, 144, 178, 0.44);
-      --indigo-400: #7d8eff;
-      --violet-400: #9f8dff;
-      --cyan-400: #1fd6d2;
-      --border-base: rgba(126, 146, 188, 0.28);
-      --border-active: rgba(95, 129, 253, 0.62);
-      --border-focus: rgba(165, 143, 255, 0.84);
-      --text: #eef3ff;
-      --muted: rgba(185, 200, 232, 0.72);
-      --glass: rgba(10, 16, 34, 0.72);
-      --accent: #7d8eff;
-      --point: #ff5f72;
-      --ink: #070707;
-      --panel-edge: rgba(160, 178, 214, 0.2);
-      --hero-glow: radial-gradient(640px 320px at 10% 2%, rgba(30, 214, 221, 0.22), transparent 60%), radial-gradient(680px 360px at 84% 10%, rgba(128, 117, 255, 0.24), transparent 64%), linear-gradient(180deg, rgba(9, 14, 29, 0.96) 0%, rgba(5, 8, 17, 0.98) 100%);
-      --card-bg: linear-gradient(180deg, rgba(13, 19, 40, 0.92) 0%, rgba(10, 15, 30, 0.92) 100%);
-      --card-border: 1px solid rgba(126, 146, 188, 0.3);
-      --shadow-lg: 0 24px 64px rgba(2, 5, 12, 0.55), inset 0 1px 0 rgba(183, 206, 252, 0.1);
+      --base: #0f1419;
+      --surface: #151c28;
+      --bg-card: #1a222c;
+      --text-primary: #e8ecf1;
+      --text-secondary: rgba(200, 210, 224, 0.82);
+      --text-muted: rgba(140, 152, 168, 0.68);
+      --text-hint: rgba(110, 125, 145, 0.5);
+      --indigo-400: #5f6f8f;
+      --violet-400: #6b7a99;
+      --cyan-400: #4a5f7f;
+      --border-base: rgba(100, 115, 135, 0.22);
+      --border-active: rgba(85, 105, 135, 0.42);
+      --border-focus: rgba(95, 120, 155, 0.6);
+      --text: #e8ecf1;
+      --muted: rgba(165, 175, 190, 0.65);
+      --glass: rgba(15, 20, 35, 0.68);
+      --accent: #5f6f8f;
+      --point: #6b5a9f;
+      --ink: #0a0c10;
+      --panel-edge: rgba(90, 110, 140, 0.15);
+      --hero-glow: linear-gradient(180deg, rgba(15, 20, 32, 0.98) 0%, rgba(10, 12, 20, 0.99) 100%);
+      --card-bg: linear-gradient(180deg, rgba(20, 27, 38, 0.92) 0%, rgba(15, 21, 33, 0.92) 100%);
+      --card-border: 1px solid rgba(100, 120, 150, 0.25);
+      --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(150, 165, 190, 0.08);
     }
 
     * { box-sizing: border-box; }
@@ -55,12 +55,13 @@
       position: fixed;
       inset: 0;
       pointer-events: none;
-      background-image:
-        linear-gradient(rgba(145, 166, 210, 0.08) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(145, 166, 210, 0.08) 1px, transparent 1px);
-      background-size: 42px 42px;
-      mask-image: radial-gradient(1200px 540px at 50% 20%, #000 48%, transparent 100%);
-      opacity: 0.38;
+      background-image: repeating-linear-gradient(
+        0deg,
+        rgba(120, 135, 160, 0.05) 0px,
+        rgba(120, 135, 160, 0.05) 1px,
+        transparent 1px,
+        transparent 45px
+      );
       z-index: 0;
     }
 
@@ -81,7 +82,7 @@
     .wrap {
       width: min(1240px, 96vw);
       margin: 0 auto;
-      padding: 34px 12px 36px;
+      padding: 68px 12px 72px;
       position: relative;
       z-index: 1;
     }
@@ -94,7 +95,7 @@
 
     .brand {
       text-align: left;
-      margin: 0 0 56px;
+      margin: 0 0 140px;
       display: flex;
       align-items: baseline;
       justify-content: space-between;
@@ -157,10 +158,10 @@
     }
 
     .hero {
-      margin: 0 0 68px;
+      margin: 0 0 140px;
       display: grid;
       grid-template-columns: minmax(450px, 1.2fr) minmax(360px, 0.8fr);
-      gap: 34px;
+      gap: 68px;
       align-items: start;
     }
 
@@ -172,7 +173,7 @@
       font-family: 'Pretendard', sans-serif;
       font-size: clamp(40px, 5vw, 68px);
       font-weight: 700;
-      color: rgba(223, 231, 251, 0.34);
+      color: rgba(160, 170, 185, 0.52);
       margin: 0;
       letter-spacing: -0.02em;
       line-height: 1.06;
@@ -180,7 +181,7 @@
     }
 
     .hero-title .highlight {
-      background: linear-gradient(100deg, #7d8eff, #a58fff, #1fd6d2 92%);
+      background: linear-gradient(100deg, #5f7a9f, #6b8fb5, #7a9fc8 92%);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
@@ -188,13 +189,13 @@
       font-size: 1.16em;
       font-weight: 800;
       line-height: 0.98;
-      text-shadow: 0 0 18px rgba(120, 126, 255, 0.34), 0 0 28px rgba(31, 214, 210, 0.24);
+      text-shadow: none;
     }
 
     .hero-title-section {
       display: flex;
       flex-direction: column;
-      gap: 14px;
+      gap: 32px;
       position: relative;
     }
 
@@ -203,8 +204,8 @@
       font-size: 12px;
       font-weight: 600;
       letter-spacing: 0.04em;
-      color: #a0bcf3;
-      margin-bottom: 4px;
+      color: #788899;
+      margin-bottom: 12px;
     }
 
     .hero-steps {
@@ -1800,39 +1801,25 @@
     }
 
     .brand-logo {
-      display: inline-flex;
-      align-items: center;
-      gap: 10px;
-      color: #12305a;
+      display: inline-block;
       font-family: 'Manrope', 'Pretendard', sans-serif;
-      letter-spacing: 0.01em;
-      text-shadow: 0 1px 0 rgba(255, 255, 255, 0.7);
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: #b8c2d0;
+      text-transform: uppercase;
     }
 
     .logo-mark {
-      width: 18px;
-      height: 18px;
-      border-radius: 50%;
-      display: grid;
-      place-items: center;
-      font-size: 10px;
-      font-weight: 800;
-      color: #ffffff;
-      background: linear-gradient(135deg, #3ea7ff, #5572ff);
-      box-shadow: 0 8px 20px rgba(66, 117, 230, 0.24);
+      display: none;
     }
 
     .logo-strong {
-      font-size: 18px;
-      font-weight: 800;
-      letter-spacing: -0.01em;
-      color: #0c2a52;
+      display: none;
     }
 
     .logo-light {
-      font-size: 15px;
-      font-weight: 600;
-      color: #5a7292;
+      display: none;
     }
 
     .hero {
@@ -1977,23 +1964,23 @@
       grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 18px;
       width: min(92vw, 980px);
-      margin: 8px auto 0;
+      margin: 140px auto 0;
       text-align: center;
     }
 
     .search-stat-item {
       border-radius: 18px;
-      padding: 20px 14px;
-      background: linear-gradient(155deg, rgba(255, 255, 255, 0.74), rgba(242, 247, 255, 0.66));
-      border: 1px solid rgba(168, 189, 227, 0.4);
-      box-shadow: 0 10px 26px rgba(83, 113, 171, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.85);
-      backdrop-filter: blur(10px);
+      padding: 24px 16px;
+      background: linear-gradient(155deg, rgba(25, 35, 50, 0.82), rgba(22, 30, 43, 0.78));
+      border: 1px solid rgba(100, 120, 150, 0.25);
+      box-shadow: 0 8px 20px rgba(10, 15, 30, 0.28), inset 0 1px 0 rgba(150, 160, 180, 0.08);
+      backdrop-filter: blur(8px);
       transition: transform .2s ease, box-shadow .2s ease;
     }
 
     .search-stat-item:hover {
       transform: translateY(-3px);
-      box-shadow: 0 14px 30px rgba(83, 113, 171, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+      box-shadow: 0 12px 28px rgba(15, 20, 35, 0.35), inset 0 1px 0 rgba(140, 155, 180, 0.1);
     }
 
     .search-stat-item strong {
@@ -2001,7 +1988,7 @@
       font-family: 'Manrope', sans-serif;
       font-size: clamp(38px, 4.2vw, 50px);
       font-weight: 800;
-      color: #356dff;
+      color: #8b9cb5;
       letter-spacing: -0.03em;
       line-height: 1.2;
       transition: transform .2s ease;
@@ -2013,7 +2000,7 @@
 
     .search-stat-item span {
       font-size: clamp(16px, 1.9vw, 20px);
-      color: #5d7393;
+      color: #6b7d95;
       font-weight: 600;
     }
 
@@ -2452,16 +2439,16 @@
         padding: 0;
         border-radius: 0;
       }
-      .wrap { width: min(96vw, 980px); padding: 20px 10px 24px; }
-      .brand { justify-content: flex-start; text-align: left; margin-bottom: 28px; flex-wrap: wrap; }
+      .wrap { width: min(96vw, 980px); padding: 40px 10px 48px; }
+      .brand { justify-content: flex-start; text-align: left; margin-bottom: 80px; flex-wrap: wrap; }
       .brand-logo { font-size: 14px; }
       .logo-mark { width: 16px; height: 16px; }
       .logo-strong { font-size: 16px; }
       .logo-light { font-size: 13px; }
       .hero {
         grid-template-columns: 1fr;
-        gap: 18px;
-        margin-bottom: 42px;
+        gap: 42px;
+        margin-bottom: 100px;
       }
       .hero-title { font-size: clamp(34px, 10vw, 52px); max-width: 100%; }
       .hero-steps { padding: 18px; border-radius: 18px; }
@@ -2507,11 +2494,7 @@
     <section id="search-page" class="page active">
       <div class="brand">
         <div class="brand-name"><span class="brand-primary">Original</span><span class="brand-dot">.</span></div>
-        <div class="brand-logo" aria-label="NOVA Research AI">
-          <span class="logo-mark">N</span>
-          <span class="logo-strong">NOVA</span>
-          <span class="logo-light">Research AI</span>
-        </div>
+        <div class="brand-logo" aria-label="Novelty Research Analysis">Novelty.ai</div>
       </div>
       <div class="hero">
         <div class="hero-title-section">

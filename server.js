@@ -87,6 +87,7 @@ const server = http.createServer(async (req, res) => {
 		return;
 	}
 	const requestUrl = new URL(req.url, 'http://' + (req.headers.host || 'localhost'));
+	console.log(`[${new Date().toISOString()}] ${req.method} ${requestUrl.pathname}`);
 	try {
 		if (req.method === 'GET' && (requestUrl.pathname === '/' || requestUrl.pathname === '/index.html')) {
 			serveFile(STATIC_FILE, res);
@@ -94,8 +95,12 @@ const server = http.createServer(async (req, res) => {
 		}
 
 		if (req.method === 'POST' && requestUrl.pathname === '/api/analyze') {
+			console.log('[analyze] Reading JSON body...');
 			const body = await readJsonBody(req);
+			console.log('[analyze] Body received:', Object.keys(body));
+			console.log('[analyze] Starting analysis...');
 			const result = await analyzeTopicSources(body);
+			console.log('[analyze] Analysis complete, sending response...');
 			sendJson(res, 200, { ok: true, ...result });
 			return;
 		}
@@ -560,10 +565,13 @@ async function translateTopicToEnglish(topic) {
 	translationUrl.searchParams.set('de', CROSSREF_MAILTO);
 
 	try {
-		const json = await fetchJsonWithRetries(translationUrl.toString(), {
+		const controller = new AbortController();
+		const timeoutId = setTimeout(() => controller.abort(), 5000); // 5초 timeout으로 단축
+		const json = await fetch(translationUrl.toString(), {
 			headers: { Accept: 'application/json' },
-			errorContext: 'Translation'
-		});
+			signal: controller.signal
+		}).then(r => r.json()).finally(() => clearTimeout(timeoutId));
+		
 		const translated = String(json?.responseData?.translatedText || '').trim();
 		if (!translated) {
 			return topic;
@@ -679,16 +687,26 @@ async function requestLlmKeywordExpansion(keyword, translatedKeyword) {
 	};
 
 	try {
-		const json = await postJsonWithRetries(url, {
+		// LLM 요청 시 5초 timeout으로 단축 (재시도 없음)
+		const controller = new AbortController();
+		const timeoutId = setTimeout(() => controller.abort(), 5000);
+		
+		const response = await fetch(url, {
+			method: 'POST',
 			headers: {
 				Authorization: `Bearer ${LLM_EXPANSION_CONFIG.apiKey}`,
 				'Content-Type': 'application/json'
 			},
-			body: payload,
-			errorContext: 'LLM keyword expansion',
-			timeoutMs: LLM_EXPANSION_CONFIG.timeoutMs
+			body: JSON.stringify(payload),
+			signal: controller.signal
 		});
+		clearTimeout(timeoutId);
 
+		if (!response.ok) {
+			return null;
+		}
+
+		const json = await response.json();
 		const outputText = String(json?.output_text || '')
 			|| json?.output?.map((item) => item?.content?.map((part) => part?.text || '').join(' ')).join(' ')
 			|| '';
