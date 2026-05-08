@@ -3502,10 +3502,31 @@
         .find((value) => value.length > 0) || '';
 
       if (!selected) {
+        // GitHub Pages는 상대 경로(/api/analyze)가 정적 호스트로 향해 405가 발생하므로
+        // 기본 API 베이스를 Render 백엔드로 강제한다.
+        if (isGitHubPagesHost()) {
+          return 'https://journal-49pm.onrender.com';
+        }
         return '';
       }
 
       const normalized = selected.replace(/\/+$/, '');
+      // GitHub Pages에서 github.io 도메인을 API 베이스로 쓰면 405가 발생하므로 교정
+      if (isGitHubPagesHost()) {
+        let normalizedHost = '';
+        try {
+          normalizedHost = new URL(normalized, window.location.href).hostname || '';
+        } catch (e) {
+          normalizedHost = '';
+        }
+        if (/github\.io$/i.test(normalizedHost)) {
+          const fallback = 'https://journal-49pm.onrender.com';
+          if (window.localStorage) {
+            window.localStorage.setItem('apiBase', fallback);
+          }
+          return fallback;
+        }
+      }
       if (window.localStorage) {
         window.localStorage.setItem('apiBase', normalized);
       }
@@ -3934,7 +3955,11 @@
       if (apiBaseOverride) {
         endpoints.push(`${apiBaseOverride}/api/analyze`);
       }
+      if (isGitHubPagesHost()) {
+        endpoints.push('https://journal-49pm.onrender.com/api/analyze');
+      }
       endpoints.push(APP_CONFIG.analyzeEndpoint);
+      endpoints.push('http://127.0.0.1:3000/api/analyze', 'http://localhost:3000/api/analyze');
       if (window.location.protocol === 'file:') {
         endpoints.push('http://127.0.0.1:3000/api/analyze', 'http://localhost:3000/api/analyze');
       }
@@ -3945,6 +3970,7 @@
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 90000);
       const endpoints = buildAnalyzeEndpoints();
+      console.log('[API Debug] endpoints to try:', endpoints);
 
       try {
         let lastError = null;
@@ -3957,6 +3983,7 @@
               signal: controller.signal
             });
             const body = await res.json().catch(() => ({}));
+            console.log('[API Debug] response:', { endpoint, status: res.status, ok: res.ok });
             if (!res.ok || !body.ok) {
               if (res.status === 404 || res.status === 405) {
                 throw new Error('분석 API 호출 경로가 올바르지 않습니다. 서버 상태를 확인해주세요.');
