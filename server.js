@@ -8,6 +8,20 @@ const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '0.0.0.0';
 const STATIC_FILE = path.join(__dirname, 'journal.html');
 const CROSSREF_MAILTO = 'huhuhu1013@naver.com';
+const DEFAULT_ALLOWED_ORIGINS = [
+	'http://localhost:3000',
+	'http://127.0.0.1:3000',
+	'https://jun-kim1.github.io',
+	'https://journal-49pm.onrender.com'
+];
+const ALLOWED_ORIGINS = dedupeStringArray([
+	...DEFAULT_ALLOWED_ORIGINS,
+	...String(process.env.ALLOWED_ORIGINS || '')
+		.split(',')
+		.map((origin) => String(origin || '').trim())
+		.filter(Boolean)
+]);
+const CORS_ALLOW_ALL = String(process.env.CORS_ALLOW_ALL || '').toLowerCase() === 'true';
 const {
 	KCI_CONFIG,
 	CROSSREF_CONFIG,
@@ -90,7 +104,14 @@ const server = http.createServer(async (req, res) => {
 	const requestUrl = new URL(req.url, 'http://' + (req.headers.host || 'localhost'));
 	console.log(`[${new Date().toISOString()}] ${req.method} ${requestUrl.pathname}`);
 	try {
-		if (req.method === 'GET' && (requestUrl.pathname === '/' || requestUrl.pathname === '/index.html')) {
+		if (req.method === 'GET' && !requestUrl.pathname.startsWith('/api/')) {
+			const relativePath = requestUrl.pathname.replace(/^\/+/, '');
+			const requestedFile = path.join(__dirname, relativePath || 'journal.html');
+			if (relativePath && fs.existsSync(requestedFile) && fs.statSync(requestedFile).isFile()) {
+				serveFile(requestedFile, res);
+				return;
+			}
+			// SPA fallback: unknown GET routes should still return the main app shell.
 			serveFile(STATIC_FILE, res);
 			return;
 		}
@@ -292,6 +313,11 @@ async function analyzeTopicSources(payload) {
 	const mergedDomestic = mergeDomesticSources(kciResult.data, nanetResult.data);
 	const mergedGlobal = mergeGlobalSources(openAlexResult.data, crossrefResult.data, arxivResult.data);
 	const merged = improvedDedupeByIdentifiers([...mergedDomestic, ...mergedGlobal]);
+
+	// 도메인 필수 키워드 감지 및 필터링 (요구사항 2, 3)
+	const domainMustKeywords = buildDomainMustKeywords(queryPack);
+	const domainFiltered = filterByDomainRelevance(merged, domainMustKeywords);
+
 	const analysis = buildAnalysisReport({
 		topic,
 		rangeYears,
@@ -304,7 +330,7 @@ async function analyzeTopicSources(payload) {
 		paperTypes: paperTypes,
 		globalTypes: globalTypesResult,
 		sortOrder: String(payload.sortOrder || 'latest')
-	}, merged, {
+	}, domainFiltered, {
 		queryPack,
 		translatedTopic,
 		globalQueryTopic,
@@ -314,13 +340,14 @@ async function analyzeTopicSources(payload) {
 	});
 
 	return {
-		data: merged,
+		data: domainFiltered,
 		analysis,
 		meta: {
 			warnings,
 			translatedTopic,
 			globalQueryTopic,
 			queryPack,
+			domainMustKeywords,
 			sources: {
 				includeKci,
 				includeCrossref,
@@ -336,7 +363,7 @@ async function analyzeTopicSources(payload) {
 			openAlexCount: openAlexResult.data.length,
 			crossrefCount: crossrefResult.data.length,
 			preprintCount: arxivResult.data.length,
-			totalCount: merged.length,
+			totalCount: domainFiltered.length,
 			crossrefCursor: crossrefResult.nextCursor,
 			arxivQuery: arxivResult.meta && arxivResult.meta.requestUrl ? arxivResult.meta.requestUrl : '',
 			openAlexQuery: openAlexResult.meta && openAlexResult.meta.requestUrl ? openAlexResult.meta.requestUrl : '',
@@ -903,6 +930,18 @@ function expandKoreanAcademicTerms(topic) {
 	const glossary = [
 		[/생성형|생성 ai/g, 'generative ai'],
 		[/인공지능|ai\b/g, 'artificial intelligence'],
+		// 개발자/프로그래머 도메인
+		[/프로그래머/g, 'programmer coder software developer'],
+		[/개발자(?!도구|환경|경험)/g, 'developer software engineer programmer'],
+		[/소프트웨어 개발|sw 개발|앱 개발/g, 'software development programming'],
+		[/소프트웨어 공학|sw 공학|sw 엔지니어링/g, 'software engineering'],
+		[/코딩|코드 생성|프로그래밍/g, 'coding programming code generation'],
+		// 심리/자기효능감 도메인
+		[/자기효능감/g, 'self-efficacy confidence psychological belief'],
+		[/효능감(?!자기)/g, 'efficacy confidence self-efficacy'],
+		[/직무 만족|업무 만족/g, 'job satisfaction work satisfaction'],
+		[/생산성|업무 효율|직무 성과/g, 'productivity performance work efficiency'],
+		// 기존 항목
 		[/대학|고등교육|대학교/g, 'university higher education'],
 		[/교육|학습|교수법/g, 'education learning pedagogy'],
 		[/글쓰기|작문/g, 'writing composition'],
@@ -922,6 +961,79 @@ function expandKoreanAcademicTerms(topic) {
 		}
 	}
 	return dedupeStringArray(terms);
+}
+
+// 쿼리에서 도메인 필수 키워드 범주를 감지하고 반환합니다.
+// 번역된 쿼리에 특정 도메인 키워드(개발자/프로그래머, 자기효능감 등)가 포함된 경우
+// 논문 필터링에 사용할 범주별 필수 키워드 목록을 반환합니다.
+function buildDomainMustKeywords(queryPack) {
+	const queryText = [
+		queryPack.translatedTopic || '',
+		queryPack.primaryQueryEn || ''
+	].join(' ').toLowerCase();
+
+	const DOMAIN_CATEGORY_MAP = {
+		agent: {
+			detect: ['programmer', 'developer', 'software engineer', 'coder'],
+			must: ['programmer', 'developer', 'software engineer', 'coder', 'software development', 'engineering']
+		},
+		psychology: {
+			detect: ['self-efficacy', 'self efficacy', 'efficacy', 'confidence', 'psychological'],
+			must: ['self-efficacy', 'self efficacy', 'efficacy', 'confidence', 'psychological', 'belief', 'motivation']
+		}
+	};
+
+	const mustKeywordsByCategory = {};
+	for (const [category, { detect, must }] of Object.entries(DOMAIN_CATEGORY_MAP)) {
+		if (detect.some((kw) => queryText.includes(kw.toLowerCase()))) {
+			mustKeywordsByCategory[category] = must;
+		}
+	}
+	return mustKeywordsByCategory;
+}
+
+// 수집된 논문 목록을 도메인 필수 키워드 기준으로 필터링합니다.
+// 감지된 각 도메인 범주에 대해 논문 제목/초록에 해당 키워드가 하나 이상 포함되어야 합니다.
+function filterByDomainRelevance(papers, mustKeywordsByCategory) {
+	const categories = Object.keys(mustKeywordsByCategory);
+	if (!categories.length) return papers;
+
+	const scored = papers
+		.map((paper) => {
+			const text = [
+				paper.title || '',
+				paper.abstract || '',
+				...(Array.isArray(paper.keywords) ? paper.keywords : [])
+			].join(' ').toLowerCase();
+
+			const categoryPass = categories.every((category) =>
+				mustKeywordsByCategory[category].some((kw) => text.includes(kw.toLowerCase()))
+			);
+			const boost = computePaperDomainBoostScore(paper, mustKeywordsByCategory);
+			return { paper, categoryPass, boost };
+		})
+		.filter((item) => item.categoryPass && item.boost >= 0.2)
+		.sort((a, b) => b.boost - a.boost)
+		.map((item) => item.paper);
+
+	console.log(`[domain-filter] ${scored.length}/${papers.length}개 논문이 도메인 필터 통과`);
+	return scored;
+}
+
+// BM25-스타일 도메인 키워드 부스트 점수 계산 (0.0 ~ 1.0)
+// md 파일의 keyword_boost_score에 해당하는 로직
+function computePaperDomainBoostScore(paper, mustKeywordsByCategory) {
+	const allMustKeywords = Object.values(mustKeywordsByCategory).flat();
+	if (!allMustKeywords.length) return 0;
+
+	const text = [
+		paper.title || '',
+		paper.abstract || '',
+		...(Array.isArray(paper.keywords) ? paper.keywords : [])
+	].join(' ').toLowerCase();
+
+	const matches = allMustKeywords.filter((kw) => text.includes(kw.toLowerCase())).length;
+	return Math.min(matches / Math.max(allMustKeywords.length, 5), 1.0);
 }
 
 function buildKciDatasetUrl(options) {
@@ -1913,10 +2025,25 @@ function sendJson(res, statusCode, payload) {
 }
 
 function setCorsHeaders(req, res) {
-	// Public API endpoint: allow all origins (including file:// -> Origin: null)
-	res.setHeader('Access-Control-Allow-Origin', '*');
+	const requestOrigin = String(req.headers.origin || '').trim();
+	const allowOrigin = resolveAllowedOrigin(requestOrigin);
+	if (allowOrigin) {
+		res.setHeader('Access-Control-Allow-Origin', allowOrigin);
+	}
+	res.setHeader('Vary', 'Origin');
 	res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-	res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+	res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+	res.setHeader('Access-Control-Max-Age', '86400');
+}
+
+function resolveAllowedOrigin(requestOrigin) {
+	if (CORS_ALLOW_ALL) {
+		return '*';
+	}
+	if (!requestOrigin || requestOrigin === 'null') {
+		return '*';
+	}
+	return ALLOWED_ORIGINS.includes(requestOrigin) ? requestOrigin : '';
 }
 
 function createError(statusCode, message) {
@@ -1957,11 +2084,27 @@ function isRelevantCrossrefRecord(record, queryTokens) {
 	if (!queryTokens.length) {
 		return true;
 	}
-	const haystackTokens = tokenizeEnglish(`${record.title} ${record.abstract} ${(record.keywords || []).join(' ')}`);
-	if (!haystackTokens.length) {
+	const haystackTokens = new Set(tokenizeEnglish(`${record.title} ${record.abstract} ${(record.keywords || []).join(' ')}`));
+	if (!haystackTokens.size) {
 		return false;
 	}
-	const overlap = queryTokens.filter((token) => haystackTokens.includes(token)).length;
+	const overlap = queryTokens.filter((token) => haystackTokens.has(token)).length;
+
+	// 도메인 특화 키워드(programmer, self-efficacy 등)가 쿼리에 있으면 더 엄격하게 검사
+	const DOMAIN_SPECIFIC_TOKENS = new Set([
+		'programmer', 'developer', 'coder',
+		'self-efficacy', 'efficacy', 'confidence', 'psychological',
+		'software', 'coding', 'programming'
+	]);
+	const domainTokensInQuery = queryTokens.filter((t) => DOMAIN_SPECIFIC_TOKENS.has(t));
+	if (domainTokensInQuery.length >= 2) {
+		// 도메인 쿼리: 전체 매칭 30% 이상 AND 도메인 키워드 최소 1개 포함
+		const minOverall = Math.max(2, Math.floor(queryTokens.length * 0.3));
+		const hasDomainMatch = domainTokensInQuery.some((t) => haystackTokens.has(t));
+		return overlap >= minOverall && hasDomainMatch;
+	}
+
+	// 일반 쿼리: 기존 20% 기준 유지
 	return overlap >= Math.max(1, Math.floor(queryTokens.length * 0.2));
 }
 
