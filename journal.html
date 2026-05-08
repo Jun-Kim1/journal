@@ -3510,23 +3510,37 @@
         return '';
       }
 
-      const normalized = selected.replace(/\/+$/, '');
-      // GitHub Pages에서 github.io 도메인을 API 베이스로 쓰면 405가 발생하므로 교정
-      if (isGitHubPagesHost()) {
-        let normalizedHost = '';
-        try {
-          normalizedHost = new URL(normalized, window.location.href).hostname || '';
-        } catch (e) {
-          normalizedHost = '';
-        }
-        if (/github\.io$/i.test(normalizedHost)) {
+      let normalized = selected.replace(/\/+$/, '').replace(/\/api\/analyze$/i, '');
+      let normalizedHost = '';
+      try {
+        normalizedHost = new URL(normalized, window.location.href).hostname || '';
+      } catch (e) {
+        normalizedHost = '';
+      }
+
+      // 잘못된 상대 경로/정적 호스트(apiBase=/api/analyze, *.github.io)는 제거 또는 교정
+      if (!/^https?:\/\//i.test(normalized)) {
+        normalized = '';
+      }
+      if (/github\.io$/i.test(normalizedHost)) {
+        if (isGitHubPagesHost()) {
           const fallback = 'https://journal-49pm.onrender.com';
           if (window.localStorage) {
             window.localStorage.setItem('apiBase', fallback);
           }
           return fallback;
         }
+        // localhost 등에서는 github.io apiBase를 무효화하고 로컬 기본 경로를 사용
+        normalized = '';
       }
+
+      if (!normalized) {
+        if (window.localStorage) {
+          window.localStorage.removeItem('apiBase');
+        }
+        return '';
+      }
+
       if (window.localStorage) {
         window.localStorage.setItem('apiBase', normalized);
       }
@@ -3773,6 +3787,14 @@
       e.preventDefault();
       clearMessages();
 
+      // 과거 세션의 잘못된 apiBase(github.io 등) 캐시를 제출 시점에도 한 번 더 정리
+      if (window.localStorage) {
+        const storedApiBase = (window.localStorage.getItem('apiBase') || '').trim();
+        if (/github\.io/i.test(storedApiBase) || /\/api\/analyze$/i.test(storedApiBase)) {
+          window.localStorage.removeItem('apiBase');
+        }
+      }
+
       let payload;
       try {
         payload = getFormData();
@@ -3985,19 +4007,29 @@
             const body = await res.json().catch(() => ({}));
             console.log('[API Debug] response:', { endpoint, status: res.status, ok: res.ok });
             if (!res.ok || !body.ok) {
+              const isRetryableStatus = res.status === 404 || res.status === 405 || (res.status >= 500 && res.status <= 599);
               if (res.status === 404 || res.status === 405) {
-                throw new Error('분석 API 호출 경로가 올바르지 않습니다. 서버 상태를 확인해주세요.');
+                const pathError = new Error('분석 API 호출 경로가 올바르지 않습니다. 서버 상태를 확인해주세요.');
+                pathError.retryable = true;
+                pathError.status = res.status;
+                throw pathError;
               }
-              throw new Error(body.error || '데이터를 가져오지 못했습니다. 잠시 후 다시 시도해주세요.');
+              const httpError = new Error(body.error || '데이터를 가져오지 못했습니다. 잠시 후 다시 시도해주세요.');
+              httpError.retryable = isRetryableStatus;
+              httpError.status = res.status;
+              throw httpError;
             }
             return body;
           } catch (innerError) {
             lastError = innerError;
             const isNetworkError = innerError && innerError.name === 'TypeError';
+            const isPathError = innerError && /호출 경로가 올바르지 않습니다/.test(String(innerError.message || ''));
+            const isRetryableHttpError = !!(innerError && innerError.retryable);
             const hasNext = endpoint !== endpoints[endpoints.length - 1];
-            if (!(isNetworkError && hasNext)) {
-              throw innerError;
+            if (hasNext && (isNetworkError || isPathError || isRetryableHttpError)) {
+              continue;
             }
+            throw innerError;
           }
         }
         throw lastError || new Error('분석 API에 연결하지 못했습니다.');
