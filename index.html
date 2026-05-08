@@ -4,17 +4,18 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Research Novelty Dashboard</title>
-  <meta http-equiv="refresh" content="0; url=./journal.html">
+  <meta http-equiv="refresh" content="0; url=./journal.html?v=20260509-1">
   <script>
-    window.__API_BASE__ = 'https://your-render-app.onrender.com';
+    // Production bootstrap: GitHub Pages -> Render API
+    window.__API_BASE__ = 'https://journal-49pm.onrender.com';
     const configuredApiBase = String(window.__API_BASE__ || '').trim().replace(/\/+$/, '');
-    if (configuredApiBase && !/your-render-app/i.test(configuredApiBase) && window.localStorage) {
+    if (configuredApiBase && window.localStorage) {
       window.localStorage.setItem('apiBase', configuredApiBase);
     }
-    window.location.replace('./journal.html');
+    window.location.replace('./journal.html?v=20260509-1');
   </script>
 </head>
 <body>
-  <p>페이지 이동 중입니다. 자동으로 이동하지 않으면 <a href="./journal.html">여기</a>를 클릭하세요.</p>
+  <p>페이지 이동 중입니다. 자동으로 이동하지 않으면 <a href="./journal.html?v=20260509-1">여기</a>를 클릭하세요.</p>
 </body>
 </html>

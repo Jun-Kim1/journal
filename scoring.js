@@ -4,16 +4,26 @@ const {
 	NOVELTY_LABELS
 } = require('./constants');
 
+const SIMILARITY_THRESHOLD = 0.4;
+const PRIORITY_KEYWORDS = [
+	'self-efficacy', 'self efficacy', 'self-confidence',
+	'programmer', 'developer', 'software engineer',
+	'psychological', 'empowerment', 'confidence'
+];
+
 function buildAnalysisReport(cfg, records, meta) {
 	const now = new Date().getFullYear();
 	const minYear = now - cfg.rangeYears + 1;
-	// Use translatedTopic (English) for scoring if available, otherwise use cfg.topic
-	const scoringTopic = (meta.translatedTopic && /[^\x00-\x7F]/.test(cfg.topic)) ? meta.translatedTopic : cfg.topic;
-	const topicTokens = tokenizeForAnalysis(scoringTopic);
 	const queryPack = meta.queryPack || {
-		coreKeywordsKo: topicTokens,
+		coreKeywordsKo: tokenizeForAnalysis(cfg.topic),
 		coreKeywordsEn: []
 	};
+	// Score with both original topic and expanded English query to avoid losing Korean domain intent.
+	const scoringTopic = meta.globalQueryTopic || meta.translatedTopic || cfg.topic;
+	const originalTopicTokens = tokenizeForAnalysis(cfg.topic);
+	const expandedTopicTokens = tokenizeForAnalysis(scoringTopic);
+	const topicTokens = dedupeStringArray([...originalTopicTokens, ...expandedTopicTokens]);
+	const domainSignals = buildDomainSignals(queryPack, cfg.topic, scoringTopic);
 
 	// 필터 없이 연도 범위만 적용 (소스/타입 필터 제거 - 모든 API 결과 포함)
 	const filtered = records.filter((record) => {
@@ -21,23 +31,35 @@ function buildAnalysisReport(cfg, records, meta) {
 		return yearOk;
 	});
 
-	const scored = filtered.map((record) => {
+	const rawScored = filtered.map((record) => {
 		const titleScore = overlapScoreForAnalysis(topicTokens, tokenizeForAnalysis(record.title));
 		const filteredKeywords = (record.keywords || []).filter((kw) => !ANALYSIS_STOP_WORDS.has(String(kw).toLowerCase()));
 		const keywordScore = overlapScoreForAnalysis(topicTokens, tokenizeForAnalysis(filteredKeywords.join(' ')));
 		const abstractScore = overlapScoreForAnalysis(topicTokens, tokenizeForAnalysis(record.abstract));
+		const domainBoost = computeDomainBoostForRecord(record, domainSignals);
 		const sourceWeight = (record.source === 'Global Journal' || record.source === 'Pre-print') ? 1.03 : 1;
 		const citationBoost = cfg.useCitationBoost && record.citationCount > 0
 			? Math.min(1.05, 1 + Math.log1p(record.citationCount) / 100)
 			: 1.0;
-		const similarity = clampRange((titleScore * 0.52 + keywordScore * 0.33 + abstractScore * 0.15) * sourceWeight * citationBoost, 0, 1);
+		const rawSimilarity = clampRange((titleScore * 0.48 + keywordScore * 0.30 + abstractScore * 0.14 + domainBoost * 0.08) * sourceWeight * citationBoost, 0, 1);
 		// fullUrl: doi 우선, url fallback
 		const doi = record.doi || '';
 		const fullUrl = doi ? (doi.startsWith('http') ? doi : `https://doi.org/${doi}`) : (record.url || '');
-		return { ...record, similarity, doi, fullUrl };
+		return { ...record, rawSimilarity, doi, fullUrl };
 	});
 
-	const relevant = scored.filter((record) => record.similarity >= 0.05 || includesLooseMatchForAnalysis(scoringTopic, record));
+	const scored = normalizeSimilarityScores(rawScored);
+
+	const relevanceThreshold = SIMILARITY_THRESHOLD;
+	const relevant = scored.filter((record) => {
+		const similarityPass = Number(record.similarity || 0) >= relevanceThreshold;
+		const loosePass = includesLooseMatchForAnalysis(scoringTopic, record);
+		if (!domainSignals.hasAny) {
+			return similarityPass || loosePass;
+		}
+		const domainPass = hasRequiredDomainEvidence(record, domainSignals);
+		return (similarityPass || loosePass) && domainPass;
+	});
 	const sorted = sortRecordsForAnalysis(relevant, cfg.sortOrder);
 	const topPapers = sorted.slice(0, 20);
 	const similarities = topPapers.map((item) => Number(item.similarity || 0)).sort((a, b) => b - a);
@@ -121,7 +143,7 @@ function buildAnalysisReport(cfg, records, meta) {
 	const recommendedJournals = buildRecommendedJournals(relevant);
 	const recommendedKciJournals = recommendedJournals; // backwards compat
 	const expectedCitationIndex = Math.round((averageNumbers(topPapers.map((paper) => Number(paper.citationCount || 0))) * 0.72) + (noveltyScore * 0.38));
-	const rankedSimilarPapers = rankSimilarPapersForAnalysis(relevant, now, relevant.length);
+	const rankedSimilarPapers = rankSimilarPapersForAnalysis(relevant, now, relevant.length, relevanceThreshold);
 	const searchWarning = confidence < 0.5 ? `검색 신뢰도가 낮습니다 (${Math.round(confidence * 100)}%). 쿼리 확장 또는 범위 확대를 권장합니다.` : null;
 
 	const scoreBreakdown = {
@@ -385,6 +407,115 @@ function includesLooseMatchForAnalysis(topic, record) {
 	);
 }
 
+function buildDomainSignals(queryPack, originalTopic, scoringTopic) {
+	const context = [
+		originalTopic || '',
+		scoringTopic || '',
+		...((queryPack && queryPack.coreKeywordsKo) || []),
+		...((queryPack && queryPack.coreKeywordsEn) || [])
+	].join(' ').toLowerCase();
+
+	const agentKeywords = ['programmer', 'developer', 'software engineer', 'coder', 'software development', 'programming'];
+	const psychologyKeywords = ['self-efficacy', 'self efficacy', 'efficacy', 'confidence', 'psychological', 'motivation', 'belief'];
+
+	const hasAgent = agentKeywords.some((kw) => context.includes(kw));
+	const hasPsychology = psychologyKeywords.some((kw) => context.includes(kw));
+
+	return {
+		hasAny: hasAgent || hasPsychology,
+		requireAllActiveCategories: hasAgent && hasPsychology,
+		agentKeywords,
+		psychologyKeywords,
+		hasAgent,
+		hasPsychology
+	};
+}
+
+function computeDomainBoostForRecord(record, domainSignals) {
+	if (!domainSignals || !domainSignals.hasAny) {
+		return 0;
+	}
+	const text = `${record.title || ''} ${record.abstract || ''} ${Array.isArray(record.keywords) ? record.keywords.join(' ') : ''}`.toLowerCase();
+	const agentMatchCount = domainSignals.hasAgent
+		? domainSignals.agentKeywords.filter((kw) => text.includes(kw)).length
+		: 0;
+	const psychologyMatchCount = domainSignals.hasPsychology
+		? domainSignals.psychologyKeywords.filter((kw) => text.includes(kw)).length
+		: 0;
+
+	const totalRequired = (domainSignals.hasAgent ? 1 : 0) + (domainSignals.hasPsychology ? 1 : 0);
+	if (totalRequired === 0) {
+		return 0;
+	}
+	const covered = (agentMatchCount > 0 ? 1 : 0) + (psychologyMatchCount > 0 ? 1 : 0);
+	return clampRange(covered / totalRequired, 0, 1);
+}
+
+function normalizeSimilarityScores(records) {
+	const values = records.map((record) => Number(record.rawSimilarity || 0)).filter((v) => Number.isFinite(v));
+	const max = values.length ? Math.max(...values) : 0;
+	const min = values.length ? Math.min(...values) : 0;
+
+	if (!values.length || max <= 0) {
+		return records.map((record) => ({ ...record, similarity: 0 }));
+	}
+
+	return records.map((record) => {
+		const raw = Number(record.rawSimilarity || 0);
+		const stretched = max > min ? (raw - min) / (max - min) : raw / max;
+		const normalized = clampRange(stretched, 0, 1);
+		return {
+			...record,
+			similarity: Number(normalized.toFixed(4))
+		};
+	});
+}
+
+function priorityScoreForPaper(paper) {
+	const text = `${paper.title || ''} ${paper.abstract || ''}`.toLowerCase();
+	return PRIORITY_KEYWORDS.reduce((sum, keyword) => sum + (text.includes(keyword) ? 1 : 0), 0);
+}
+
+function debugSimilarityCheck(queryVector, paperVector) {
+	const vecA = Array.isArray(queryVector) ? queryVector.map((v) => Number(v) || 0) : [];
+	const vecB = Array.isArray(paperVector) ? paperVector.map((v) => Number(v) || 0) : [];
+	if (!vecA.length || !vecB.length || vecA.length !== vecB.length) {
+		return { dot: 0, normA: 0, normB: 0, cosine: 0, normalized: 0, percent: 0 };
+	}
+
+	const dot = vecA.reduce((sum, v, i) => sum + (v * vecB[i]), 0);
+	const normA = Math.sqrt(vecA.reduce((sum, v) => sum + (v * v), 0));
+	const normB = Math.sqrt(vecB.reduce((sum, v) => sum + (v * v), 0));
+	const cosine = (normA > 0 && normB > 0) ? dot / (normA * normB) : 0;
+	const normalized = clampRange((cosine + 1) / 2, 0, 1);
+	return {
+		dot: Number(dot.toFixed(4)),
+		normA: Number(normA.toFixed(4)),
+		normB: Number(normB.toFixed(4)),
+		cosine: Number(cosine.toFixed(4)),
+		normalized: Number(normalized.toFixed(4)),
+		percent: Math.round(normalized * 100)
+	};
+}
+
+function hasRequiredDomainEvidence(record, domainSignals) {
+	if (!domainSignals || !domainSignals.hasAny) {
+		return true;
+	}
+	const text = `${record.title || ''} ${record.abstract || ''} ${Array.isArray(record.keywords) ? record.keywords.join(' ') : ''}`.toLowerCase();
+	const hasAgentMatch = domainSignals.hasAgent
+		? domainSignals.agentKeywords.some((kw) => text.includes(kw))
+		: true;
+	const hasPsychologyMatch = domainSignals.hasPsychology
+		? domainSignals.psychologyKeywords.some((kw) => text.includes(kw))
+		: true;
+
+	if (domainSignals.requireAllActiveCategories) {
+		return hasAgentMatch && hasPsychologyMatch;
+	}
+	return hasAgentMatch && hasPsychologyMatch;
+}
+
 function sortRecordsForAnalysis(records, sortOrder) {
 	const sorted = [...records];
 	if (sortOrder === 'citation') {
@@ -485,14 +616,16 @@ function computePmiKeywordRarity(keywords, papers) {
 	return Math.round(clampRange((1 - meanNpmi) / 2, 0, 1) * 10000) / 10000;
 }
 
-function rankSimilarPapersForAnalysis(papers, currentYear, topK) {
+function rankSimilarPapersForAnalysis(papers, currentYear, topK, threshold = SIMILARITY_THRESHOLD) {
 	const maxCitations = Math.max(1, ...papers.map((paper) => Number(paper.citationCount || 0)));
 	return [...papers]
+		.filter((paper) => Number(paper.similarity || 0) >= threshold)
 		.map((paper) => {
 			const age = currentYear - Number(paper.year || currentYear);
 			const recency = Math.max(0, 1 - (age / 20));
 			const citeNorm = Math.log1p(Number(paper.citationCount || 0)) / Math.log1p(maxCitations + 1);
-			const rankScore = (0.5 * Number(paper.similarity || 0)) + (0.25 * recency) + (0.25 * citeNorm);
+			const priorityScore = priorityScoreForPaper(paper);
+			const rankScore = (0.45 * Number(paper.similarity || 0)) + (0.2 * recency) + (0.2 * citeNorm) + (0.15 * Math.min(priorityScore / 4, 1));
 			const doi = paper.doi || '';
 			const link = paper.fullUrl || (doi ? (doi.startsWith('http') ? doi : `https://doi.org/${doi}`) : (paper.url || ''));
 			return {
@@ -500,11 +633,12 @@ function rankSimilarPapersForAnalysis(papers, currentYear, topK) {
 				doi,
 				link,
 				fullUrl: link,
+				priorityScore,
 				similarityPercent: Math.round(Number(paper.similarity || 0) * 100),
 				rankScore: Math.round(rankScore * 10000) / 10000
 			};
 		})
-		.sort((a, b) => b.rankScore - a.rankScore)
+		.sort((a, b) => (b.priorityScore - a.priorityScore) || (b.rankScore - a.rankScore))
 		.slice(0, topK);
 }
 
@@ -701,6 +835,7 @@ module.exports = {
 	sortRecordsForAnalysis,
 	buildAnalysisYearDistribution,
 	rankSimilarPapersForAnalysis,
+	debugSimilarityCheck,
 	averageNumbers,
 	clampRange,
 	buildRecommendedKciJournals,

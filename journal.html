@@ -1220,6 +1220,19 @@
       margin-top: 4px;
     }
 
+    .kpi-journal-names {
+      margin-top: 2px;
+      font-size: 11px;
+      color: #5f7390;
+      line-height: 1.5;
+      min-height: 34px;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
     .view-papers-btn:hover {
       background: linear-gradient(135deg, rgba(3, 218, 198, 0.25), rgba(187, 134, 252, 0.15));
       border-color: rgba(3, 218, 198, 0.6);
@@ -2036,49 +2049,115 @@
       box-shadow: 0 0 0 4px rgba(92, 139, 255, 0.22), 0 12px 24px rgba(92, 139, 255, 0.3) !important;
     }
 
-    .search-stats {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 18px;
+    .trending-section {
       width: min(92vw, 980px);
-      margin: 140px auto 0;
-      text-align: center;
+      margin: 52px auto 0;
+      padding-top: 16px;
+      border-top: 1px solid #dbe2ec;
     }
 
-    .search-stat-item {
-      border-radius: 18px;
-      padding: 24px 16px;
-      background: linear-gradient(155deg, rgba(25, 35, 50, 0.82), rgba(22, 30, 43, 0.78));
-      border: 1px solid rgba(100, 120, 150, 0.25);
-      box-shadow: 0 8px 20px rgba(10, 15, 30, 0.28), inset 0 1px 0 rgba(150, 160, 180, 0.08);
-      backdrop-filter: blur(8px);
-      transition: transform .2s ease, box-shadow .2s ease;
+    .trending-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
     }
 
-    .search-stat-item:hover {
-      transform: translateY(-3px);
-      box-shadow: 0 12px 28px rgba(15, 20, 35, 0.35), inset 0 1px 0 rgba(140, 155, 180, 0.1);
-    }
-
-    .search-stat-item strong {
-      display: block;
-      font-family: 'Manrope', sans-serif;
-      font-size: clamp(38px, 4.2vw, 50px);
+    .trending-title {
+      margin: 0;
+      font-size: 34px;
       font-weight: 800;
-      color: #8b9cb5;
-      letter-spacing: -0.03em;
-      line-height: 1.2;
-      transition: transform .2s ease;
+      color: #111827;
+      letter-spacing: -0.02em;
     }
 
-    .search-stat-item:hover strong {
-      transform: translateY(-2px);
-    }
-
-    .search-stat-item span {
-      font-size: clamp(16px, 1.9vw, 20px);
-      color: #6b7d95;
+    .trending-basis {
+      font-size: 20px;
       font-weight: 600;
+      color: #73839b;
+    }
+
+    .trending-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .trend-card {
+      background: #f6f9fd;
+      border: 1px solid #d6e0ee;
+      border-radius: 16px;
+      padding: 18px 20px;
+      box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8) inset;
+      transition: transform .18s ease, box-shadow .18s ease;
+    }
+
+    .trend-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(40, 63, 95, 0.12);
+    }
+
+    .trend-card-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .trend-topic {
+      font-size: 16px;
+      font-weight: 700;
+      color: #1f2937;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 82%;
+    }
+
+    .trend-growth {
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+
+    .trend-growth.positive {
+      color: #00a36c;
+    }
+
+    .trend-growth.negative {
+      color: #d14343;
+    }
+
+    .trend-pub-count {
+      margin-top: 8px;
+      font-size: 15px;
+      color: #6b7e96;
+      font-weight: 600;
+    }
+
+    .trend-no-data {
+      margin: 0;
+      padding: 18px 20px;
+      border: 1px dashed #ced8e6;
+      border-radius: 14px;
+      color: #718096;
+      background: #f8fbff;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .trend-skeleton {
+      height: 84px;
+      border-radius: 16px;
+      border: 1px solid #d6e0ee;
+      background: linear-gradient(90deg, #edf2f8 20%, #f8fbff 50%, #edf2f8 80%);
+      background-size: 200% 100%;
+      animation: trendShimmer 1.4s infinite linear;
+    }
+
+    @keyframes trendShimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
     }
 
     .loading-shell {
@@ -2571,19 +2650,28 @@
 
     .result-grid {
       margin-top: 16px !important;
-      grid-template-columns: 1.14fr 1fr 1fr 1fr !important;
+      grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
       gap: 16px !important;
     }
 
-    .analysis-main,
-    .trend-panel,
+    .analysis-main {
+      display: flex !important;
+      grid-column: 1 / 3 !important;
+      grid-row: 1 !important;
+      background: #f0f3f7 !important;
+      border-color: #dce3ec !important;
+      box-shadow: none !important;
+      border-radius: 16px !important;
+    }
+
     .paper-panel,
-    .panel-main-wide {
+    .panel-main-wide,
+    .trend-panel {
       display: none !important;
     }
 
     .keyword-panel {
-      grid-column: 2 / 5 !important;
+      grid-column: 3 / 5 !important;
       grid-row: 1 !important;
       background: #f0f3f7 !important;
       border-color: #dce3ec !important;
@@ -2628,15 +2716,15 @@
     }
 
     #strengthPanel {
-      grid-column: 2 / 4;
-      grid-row: 2;
+      grid-column: 1 / 3 !important;
+      grid-row: 2 !important;
       background: #eaf5ef !important;
       border-color: #bfe5cf !important;
     }
 
     #directionPanel {
-      grid-column: 4 / 5;
-      grid-row: 2;
+      grid-column: 3 / 5 !important;
+      grid-row: 2 !important;
       background: #ecf5fb !important;
       border-color: #bde1f4 !important;
     }
@@ -3033,6 +3121,11 @@
       .scope-area { grid-template-columns: 1fr; margin-top: 0; }
       .scope-pair { grid-template-columns: 1fr; }
       .scope-divider { width: auto; height: 1px; margin: 12px 0; }
+      .trending-section { margin-top: 40px; }
+      .trending-header { align-items: flex-end; gap: 10px; }
+      .trending-title { font-size: 26px; }
+      .trending-basis { font-size: 14px; }
+      .trending-grid { grid-template-columns: 1fr; }
       .result-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .result-grid { grid-template-columns: 1fr; gap: 18px; }
       .score-breakdown { grid-template-columns: 1fr; }
@@ -3109,21 +3202,6 @@
         </div>
         <div id="errorBox"></div>
       </form>
-
-      <div class="search-stats">
-        <div class="search-stat-item">
-          <strong>2,751만+</strong>
-          <span>탐색 논문 데이터</span>
-        </div>
-        <div class="search-stat-item">
-          <strong>98.7%</strong>
-          <span>정확도</span>
-        </div>
-        <div class="search-stat-item">
-          <strong>&lt;30초</strong>
-          <span>평균 분석 시간</span>
-        </div>
-      </div>
 
       <div class="process-steps" style="display: none;">
         <div class="ps-step">
@@ -3235,6 +3313,19 @@
         </svg>
         <span>연구 주제는 외부에 공유되지 않으며, 분석 후 저장되지 않습니다.</span>
       </div>
+
+      <section id="trendingSection" class="trending-section" aria-live="polite">
+        <div class="trending-header">
+          <h2 class="trending-title">최근 주목받는 연구 주제</h2>
+          <span id="trendingBasis" class="trending-basis">지난 30일 기준</span>
+        </div>
+        <div id="trendingGrid" class="trending-grid">
+          <div class="trend-skeleton"></div>
+          <div class="trend-skeleton"></div>
+          <div class="trend-skeleton"></div>
+          <div class="trend-skeleton"></div>
+        </div>
+      </section>
     </section>
 
     <section id="loading-page" class="page">
@@ -3322,7 +3413,8 @@
             <h4>게재 저널 수</h4>
             <div id="expectedCitationKpi" class="num">0</div>
             <div class="sub">유사 논문 기준</div>
-            <button id="viewJournalsBtn" class="view-papers-btn">목록 보기 →</button>
+            <div id="topJournalNames" class="kpi-journal-names">저널명 로딩 중...</div>
+            <button id="viewJournalsBtn" class="view-papers-btn">저널 목록 보기 →</button>
             <div id="sparkCitation" class="kpi-spark"></div>
           </article>
         </div>
@@ -3407,8 +3499,8 @@
           </section>
           <section class="bottom-panel">
             <h3 class="bottom-panel-title">분석 대상 저널 분포</h3>
-            <p style="font-size:12px;color:#718096;margin:0 0 14px;">유사 논문이 게재된 저널들입니다. 저널명을 클릭하면 모달에서 상세 정보를 확인할 수 있습니다.</p>
-            <div id="bottomJournalChips" class="bottom-journal-chips"></div>
+            <p style="font-size:12px;color:#718096;margin:0 0 14px;">유사 논문이 실린 저널을 카드 형태로 확인할 수 있습니다.</p>
+            <div id="bottomJournalList" class="bottom-similar-list"></div>
           </section>
         </div>
 
@@ -3462,6 +3554,7 @@
   <script>
     const APP_CONFIG = {
       analyzeEndpoint: '/api/analyze',
+      trendingEndpoint: '/api/trending-topics',
       healthEndpoint: '/health'
     };
 
@@ -3484,6 +3577,9 @@
     const loadingProgressBar = document.getElementById('loadingProgressBar');
     const resultSortOrder = document.getElementById('resultSortOrder');
     const queryLengthHint = document.getElementById('queryLengthHint');
+    const trendingGrid = document.getElementById('trendingGrid');
+    const trendingBasis = document.getElementById('trendingBasis');
+    let trendingRefreshTimer = null;
 
     function isGitHubPagesHost() {
       return /github\.io$/i.test(window.location.hostname || '');
@@ -3531,6 +3627,11 @@
           return fallback;
         }
         // localhost 등에서는 github.io apiBase를 무효화하고 로컬 기본 경로를 사용
+        normalized = '';
+      }
+
+      // HTTPS 페이지에서 http API 베이스는 Mixed Content로 차단되므로 제거
+      if (window.location.protocol === 'https:' && /^http:\/\//i.test(normalized)) {
         normalized = '';
       }
 
@@ -3737,23 +3838,43 @@
       journalModal.classList.add('hidden');
     }
 
-    // ── 하단: 저널 분포 칩 렌더 ───────────────────────
-    function renderBottomJournalChips(items) {
-      const target = document.getElementById('bottomJournalChips');
+    // ── 하단: 저널 분포 리스트 렌더(유사논문 카드 디자인 재사용) ──
+    function renderBottomJournalList(items) {
+      const target = document.getElementById('bottomJournalList');
       if (!target) return;
       target.innerHTML = '';
       if (!items.length) {
         target.innerHTML = '<span style="color:#718096;font-size:13px;">저널 데이터가 충분하지 않습니다.</span>';
         return;
       }
-      items.slice(0, 30).forEach((item) => {
-        const chip = document.createElement('button');
-        chip.className = 'journal-chip';
-        chip.title = `${item.journal} — 누적 ${item.count}건`;
-        chip.innerHTML = `${escapeHtml(item.journal)}<span class="journal-chip-count">${item.count}</span>`;
-        chip.addEventListener('click', () => openJournalModal());
-        target.appendChild(chip);
+      items.slice(0, 12).forEach((item) => {
+        const row = document.createElement('div');
+        row.className = 'sim-card';
+        row.innerHTML = `
+          <div class="sim-card-info">
+            <div class="sim-card-title">${escapeHtml(item.journal || '저널 정보 없음')}</div>
+            <div class="sim-card-authors">출처: ${escapeHtml(item.source || 'Global/KCI')}</div>
+            <div class="sim-card-meta">누적 ${escapeHtml(String(item.count || 0))}건 · 최근 3년 ${escapeHtml(String(item.recentCount || 0))}건</div>
+          </div>
+          <div class="sim-badge">${escapeHtml(String(item.count || 0))}건</div>
+        `;
+        row.addEventListener('click', openJournalModal);
+        target.appendChild(row);
       });
+    }
+
+    function renderTopJournalNames(items) {
+      const target = document.getElementById('topJournalNames');
+      if (!target) return;
+      if (!items || !items.length) {
+        target.textContent = '확인된 게재 저널 정보가 없습니다.';
+        return;
+      }
+      const names = items
+        .slice(0, 3)
+        .map((item) => `${item.journal}(${item.count})`)
+        .join(' · ');
+      target.textContent = names;
     }
 
     if (journalSortSelect) {
@@ -3882,6 +4003,11 @@
     });
 
     initializeScopeOptions();
+    loadTrendingTopics();
+    if (trendingRefreshTimer) clearInterval(trendingRefreshTimer);
+    trendingRefreshTimer = setInterval(() => {
+      loadTrendingTopics();
+    }, 30 * 60 * 1000);
 
     function initializeScopeOptions() {
       if (!includeCrossrefInput.checked) includeCrossrefInput.dispatchEvent(new Event('change'));
@@ -3974,18 +4100,56 @@
 
     function buildAnalyzeEndpoints() {
       const endpoints = [];
+      const isLocalHost = /^(localhost|127\.0\.0\.1)$/i.test(window.location.hostname || '');
+      const isSecureContext = window.location.protocol === 'https:';
+
       if (apiBaseOverride) {
         endpoints.push(`${apiBaseOverride}/api/analyze`);
       }
       if (isGitHubPagesHost()) {
         endpoints.push('https://journal-49pm.onrender.com/api/analyze');
       }
-      endpoints.push(APP_CONFIG.analyzeEndpoint);
-      endpoints.push('http://127.0.0.1:3000/api/analyze', 'http://localhost:3000/api/analyze');
-      if (window.location.protocol === 'file:') {
+
+      // GitHub Pages에서는 상대 경로 /api/*가 정적 호스트를 향해 405가 나므로 제외
+      if (!isGitHubPagesHost()) {
+        endpoints.push(APP_CONFIG.analyzeEndpoint);
+      }
+
+      // localhost 또는 file:// 개발 환경에서만 로컬 API를 시도한다.
+      if (isLocalHost || window.location.protocol === 'file:') {
         endpoints.push('http://127.0.0.1:3000/api/analyze', 'http://localhost:3000/api/analyze');
       }
-      return Array.from(new Set(endpoints));
+
+      // HTTPS 배포 환경에서는 http 엔드포인트를 제거해 Mixed Content를 예방
+      const finalEndpoints = isSecureContext
+        ? endpoints.filter((url) => !/^http:\/\//i.test(url))
+        : endpoints;
+      return Array.from(new Set(finalEndpoints));
+    }
+
+    function buildTrendingEndpoints() {
+      const endpoints = [];
+      const isLocalHost = /^(localhost|127\.0\.0\.1)$/i.test(window.location.hostname || '');
+      const isSecureContext = window.location.protocol === 'https:';
+
+      if (apiBaseOverride) {
+        endpoints.push(`${apiBaseOverride}/api/trending-topics`);
+      }
+      if (isGitHubPagesHost()) {
+        endpoints.push('https://journal-49pm.onrender.com/api/trending-topics');
+      }
+      if (!isGitHubPagesHost()) {
+        endpoints.push(APP_CONFIG.trendingEndpoint);
+      }
+      if (isLocalHost || window.location.protocol === 'file:') {
+        endpoints.push('http://127.0.0.1:3000/api/trending-topics', 'http://localhost:3000/api/trending-topics');
+      }
+
+      const finalEndpoints = isSecureContext
+        ? endpoints.filter((url) => !/^http:\/\//i.test(url))
+        : endpoints;
+
+      return Array.from(new Set(finalEndpoints));
     }
 
     async function fetchData(config) {
@@ -4043,6 +4207,108 @@
         throw error;
       } finally {
         clearTimeout(timeout);
+      }
+    }
+
+    function renderTrendingSkeleton() {
+      if (!trendingGrid) return;
+      trendingGrid.innerHTML = '';
+      for (let i = 0; i < 4; i += 1) {
+        const node = document.createElement('div');
+        node.className = 'trend-skeleton';
+        trendingGrid.appendChild(node);
+      }
+    }
+
+    function formatTrendGrowth(value) {
+      const num = Number(value || 0);
+      if (!Number.isFinite(num)) return '+0%';
+      return `${num >= 0 ? '+' : ''}${Math.round(num)}%`;
+    }
+
+    function renderTrendingTopics(items, meta) {
+      if (!trendingGrid) return;
+      trendingGrid.innerHTML = '';
+
+      if (trendingBasis) {
+        const basis = (meta && meta.basis) ? String(meta.basis) : '지난 30일 기준';
+        trendingBasis.textContent = basis;
+      }
+
+      if (!Array.isArray(items) || !items.length) {
+        const noData = document.createElement('p');
+        noData.className = 'trend-no-data';
+        noData.textContent = '현재 트렌드 데이터를 불러올 수 없습니다.';
+        trendingGrid.appendChild(noData);
+        return;
+      }
+
+      items.slice(0, 4).forEach((item) => {
+        const card = document.createElement('article');
+        card.className = 'trend-card';
+
+        const growth = Number(item.growth_rate || 0);
+        const growthClass = growth >= 0 ? 'positive' : 'negative';
+        const recentCount = Number(item.recent_count || 0);
+
+        card.innerHTML = `
+          <div class="trend-card-top">
+            <span class="trend-topic">${escapeHtml(String(item.topic || '-'))}</span>
+            <span class="trend-growth ${growthClass}">${escapeHtml(formatTrendGrowth(growth))}</span>
+          </div>
+          <p class="trend-pub-count">최근 ${recentCount.toLocaleString()}편 출판</p>
+        `;
+        trendingGrid.appendChild(card);
+      });
+    }
+
+    async function fetchTrendingTopics(forceRefresh = false) {
+      const endpoints = buildTrendingEndpoints();
+      let lastError = null;
+
+      for (const endpoint of endpoints) {
+        try {
+          const url = forceRefresh
+            ? `${endpoint}${endpoint.includes('?') ? '&' : '?'}refresh=true`
+            : endpoint;
+
+          const res = await fetch(url, {
+            method: 'GET',
+            headers: { Accept: 'application/json' }
+          });
+          const body = await res.json().catch(() => ({}));
+          if (!res.ok || !body.ok) {
+            const message = (body && body.error) ? body.error : `트렌드 API 오류 (${res.status})`;
+            const err = new Error(message);
+            err.retryable = res.status >= 500 || res.status === 404 || res.status === 405;
+            throw err;
+          }
+
+          return {
+            data: Array.isArray(body.data) ? body.data : [],
+            meta: (body.meta && typeof body.meta === 'object') ? body.meta : {}
+          };
+        } catch (error) {
+          lastError = error;
+          const hasNext = endpoint !== endpoints[endpoints.length - 1];
+          if (hasNext && (error.retryable || error.name === 'TypeError')) {
+            continue;
+          }
+          throw error;
+        }
+      }
+
+      throw lastError || new Error('트렌드 데이터를 불러오지 못했습니다.');
+    }
+
+    async function loadTrendingTopics(forceRefresh = false) {
+      renderTrendingSkeleton();
+      try {
+        const result = await fetchTrendingTopics(forceRefresh);
+        renderTrendingTopics(result.data, result.meta);
+      } catch (error) {
+        console.error('[Trend] fetch failed:', error);
+        renderTrendingTopics([], {});
       }
     }
 
@@ -4258,6 +4524,21 @@
       const now = new Date().getFullYear();
       const minYear = now - cfg.rangeYears + 1;
       const topicTokens = tokenize(cfg.topic);
+      // 한국어 토큰과 영어 번역 토큰을 결합 — 영어 논문 제목/초록과의 매칭 정확도 향상
+      const englishTopicTokens = (meta && (meta.globalQueryTopic || meta.translatedTopic))
+        ? tokenize(meta.globalQueryTopic || meta.translatedTopic)
+        : [];
+      const allTopicTokens = [...new Set([...topicTokens, ...englishTopicTokens])];
+
+      // 쿼리에서 도메인 특화 키워드 추출 (programmer, self-efficacy 등)
+      const DOMAIN_BOOST_WORDS = [
+        'programmer', 'developer', 'software engineer', 'coder',
+        'self-efficacy', 'self efficacy', 'efficacy', 'confidence', 'psychological',
+        'software engineering', 'programming', 'coding', 'software development'
+      ];
+      const domainBoosters = DOMAIN_BOOST_WORDS.filter((kw) =>
+        allTopicTokens.some((t) => kw.includes(t) || t.includes(kw.split(' ')[0]))
+      );
 
       const filtered = records.filter((record) => {
         const yearOk = !record.year || record.year >= minYear;
@@ -4278,15 +4559,21 @@
       });
 
       const scored = filtered.map((record) => {
-        const titleScore = overlapScore(topicTokens, tokenize(record.title));
-        const keywordScore = overlapScore(topicTokens, tokenize((record.keywords || []).join(' ')));
-        const abstractScore = overlapScore(topicTokens, tokenize(record.abstract));
+        const titleScore = overlapScore(allTopicTokens, tokenize(record.title));
+        const keywordScore = overlapScore(allTopicTokens, tokenize((record.keywords || []).join(' ')));
+        const abstractScore = overlapScore(allTopicTokens, tokenize(record.abstract));
         const sourceWeight = (record.source === 'Global Journal' || record.source === 'Pre-print') ? 1.03 : 1;
-        const similarity = clamp((titleScore * 0.52 + keywordScore * 0.33 + abstractScore * 0.15) * sourceWeight, 0, 1);
+
+        // 도메인 키워드 부스트: 논문에 programmer/self-efficacy 등이 있으면 가산점
+        const paperText = (record.title + ' ' + (record.abstract || '')).toLowerCase();
+        const domainMatchCount = domainBoosters.filter((kw) => paperText.includes(kw)).length;
+        const domainBoost = domainBoosters.length > 0 ? Math.min(domainMatchCount / domainBoosters.length, 1) * 0.15 : 0;
+
+        const similarity = clamp((titleScore * 0.50 + keywordScore * 0.30 + abstractScore * 0.12 + domainBoost * 0.08) * sourceWeight, 0, 1);
         return { ...record, similarity };
       });
 
-      const relevant = scored.filter((record) => record.similarity >= 0.08 || includesLooseMatch(cfg.topic, record));
+      const relevant = scored.filter((record) => record.similarity >= 0.10 || includesLooseMatch(cfg.topic, record));
       const sorted = sortRecords(relevant, cfg.sortOrder);
       const topPapers = sorted.slice(0, 12);
       const topAvg = average(topPapers.map((item) => item.similarity));
@@ -4638,7 +4925,8 @@
 
       // 저널 집계 상태 갱신 후 하단 칩 렌더
       journalCurrentItems = aggregateJournalsFromPapers(safeAllPapers.length ? safeAllPapers : safeSimilarPapers);
-      renderBottomJournalChips(journalCurrentItems);
+      renderTopJournalNames(journalCurrentItems);
+      renderBottomJournalList(journalCurrentItems);
     }
 
     function renderRecommendationLists(analysis) {

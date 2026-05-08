@@ -1,0 +1,134 @@
+Global paper analysis server running at http://localhost:3000
+[2026-05-08T14:42:29.765Z] POST /api/analyze
+[analyze] Reading JSON body...
+[analyze] Body received: [ 'topic', 'rangeYears', 'pageSize' ]
+[analyze] Topic: 생성형 AI가 프로그래머 자기효능감에 미치는 영향
+[analyze] PaperTypes: undefined
+[analyze] GlobalTypes: undefined
+[analyze] Starting analysis...
+[analyze] Final paperTypes: [ '학술지' ]
+[analyze] Final globalTypes: [ 'journal', 'preprint' ]
+[sources] KCI: 0, NANET: 0, OpenAlex: 3, Crossref: 0, arXiv: 0
+[domain-filter] 필터 결과 부족 (0/3), 원본 반환
+[analyze] Result data count: 3
+[analyze] Result matchCount: 2
+[analyze] Result similarPapers count: 2
+[analyze] Analysis complete, sending response...
+[2026-05-08T14:47:15.941Z] POST /api/analyze
+[analyze] Reading JSON body...
+[analyze] Body received: [ 'rangeYears', 'pageSize', 'topic' ]
+[analyze] Topic: 생성형 AI가 프로그래머 자기효능감에 미치는 영향
+[analyze] PaperTypes: undefined
+[analyze] GlobalTypes: undefined
+[analyze] Starting analysis...
+[analyze] Final paperTypes: [ '학술지' ]
+[analyze] Final globalTypes: [ 'journal', 'preprint' ]
+[sources] KCI: 0, NANET: 0, OpenAlex: 3, Crossref: 0, arXiv: 0
+[domain-filter] 필터 결과 부족 (0/3), 원본 반환
+[analyze] Result data count: 3
+[analyze] Result matchCount: 2
+[analyze] Result similarPapers count: 2
+[analyze] Analysis complete, sending response...
+[2026-05-08T14:47:54.251Z] POST /api/analyze
+[analyze] Reading JSON body...
+[analyze] Body received: [ 'topic', 'rangeYears', 'pageSize' ]
+[analyze] Topic: 생성형 AI가 프로그래머 자기효능감에 미치는 영향
+[analyze] PaperTypes: undefined
+[analyze] GlobalTypes: undefined
+[analyze] Starting analysis...
+[analyze] Final paperTypes: [ '학술지' ]
+[analyze] Final globalTypes: [ 'journal', 'preprint' ]
+[sources] KCI: 0, NANET: 0, OpenAlex: 3, Crossref: 0, arXiv: 0
+[domain-filter] 필터 결과 부족 (0/3), 원본 반환
+[analyze] Result data count: 3
+[analyze] Result matchCount: 2
+[analyze] Result similarPapers count: 2
+[analyze] Analysis complete, sending response...
+[2026-05-08T14:49:47.312Z] POST /api/analyze
+[analyze] Reading JSON body...
+[analyze] Body received: [ 'rangeYears', 'pageSize', 'topic' ]
+[analyze] Topic: 생성형 AI가 프로그래머 자기효능감에 미치는 영향
+[analyze] PaperTypes: undefined
+[analyze] GlobalTypes: undefined
+[analyze] Starting analysis...
+[analyze] Final paperTypes: [ '학술지' ]
+[analyze] Final globalTypes: [ 'journal', 'preprint' ]
+[sources] KCI: 0, NANET: 0, OpenAlex: 3, Crossref: 0, arXiv: 0
+[domain-filter] 필터 결과 부족 (0/3), 원본 반환
+[analyze] Result data count: 3
+[analyze] Result matchCount: 2
+[analyze] Result similarPapers count: 2
+[analyze] Analysis complete, sending response...
+[2026-05-08T14:57:14.723Z] POST /api/analyze
+[analyze] Reading JSON body...
+[analyze] Body received: [ 'topic', 'rangeYears', 'pageSize' ]
+[analyze] Topic: 생성형 AI 활용이 프로그래머 자기효능감에 미치는 영향
+[analyze] PaperTypes: undefined
+[analyze] GlobalTypes: undefined
+[analyze] Starting analysis...
+[analyze] Final paperTypes: [ '학술지' ]
+[analyze] Final globalTypes: [ 'journal', 'preprint' ]
+[sources] KCI: 0, NANET: 0, OpenAlex: 2, Crossref: 0, arXiv: 0
+[domain-filter] 필터 결과 부족 (0/2), 원본 반환
+[analyze] Result data count: 2
+[analyze] Result matchCount: 2
+[analyze] Result similarPapers count: 2
+[analyze] Analysis complete, sending response...
+[2026-05-08T14:57:49.304Z] POST /api/analyze
+[analyze] Reading JSON body...
+[analyze] Body received: [ 'topic', 'rangeYears', 'pageSize' ]
+[analyze] Topic: 생성형 AI 활용이 프로그래머 자기효능감에 미치는 영향
+[analyze] PaperTypes: undefined
+[analyze] GlobalTypes: undefined
+[analyze] Starting analysis...
+[analyze] Final paperTypes: [ '학술지' ]
+[analyze] Final globalTypes: [ 'journal', 'preprint' ]
+[sources] KCI: 0, NANET: 0, OpenAlex: 2, Crossref: 0, arXiv: 0
+[domain-filter] 필터 결과 부족 (0/2), 원본 반환
+[analyze] Result data count: 2
+[analyze] Result matchCount: 2
+[analyze] Result similarPapers count: 2
+[analyze] Analysis complete, sending response...
+[2026-05-08T14:58:20.368Z] GET /
+[2026-05-08T14:59:05.406Z] POST /api/analyze
+[analyze] Reading JSON body...
+[analyze] Body received: [ 'topic', 'rangeYears', 'pageSize' ]
+[analyze] Topic: 생성형 AI 활용이 프로그래머 자기효능감에 미치는 영향
+[analyze] PaperTypes: undefined
+[analyze] GlobalTypes: undefined
+[analyze] Starting analysis...
+[analyze] Final paperTypes: [ '학술지' ]
+[analyze] Final globalTypes: [ 'journal', 'preprint' ]
+[sources] KCI: 0, NANET: 0, OpenAlex: 2, Crossref: 0, arXiv: 0
+[domain-filter] 필터 결과 부족 (0/2), 원본 반환
+[analyze] Result data count: 2
+[analyze] Result matchCount: 2
+[analyze] Result similarPapers count: 2
+[analyze] Analysis complete, sending response...
+[2026-05-08T15:03:35.584Z] POST /api/analyze
+[analyze] Reading JSON body...
+[analyze] Body received: [ 'topic', 'rangeYears', 'pageSize' ]
+[analyze] Topic: 생성형 AI 활용이 프로그래머 자기효능감에 미치는 영향
+[analyze] PaperTypes: undefined
+[analyze] GlobalTypes: undefined
+[analyze] Starting analysis...
+[analyze] Final paperTypes: [ '학술지' ]
+[analyze] Final globalTypes: [ 'journal', 'preprint' ]
+[sources] KCI: 0, NANET: 0, OpenAlex: 2, Crossref: 0, arXiv: 0
+[domain-filter] 필터 결과 부족 (0/2), 원본 반환
+[analyze] Result data count: 2
+[analyze] Result matchCount: 2
+[analyze] Result similarPapers count: 2
+[analyze] Analysis complete, sending response...
+[2026-05-08T15:04:53.842Z] POST /api/analyze
+[analyze] Reading JSON body...
+[2026-05-08T15:06:48.150Z] POST /api/analyze
+[analyze] Reading JSON body...
+[2026-05-08T15:20:22.908Z] GET /
+[2026-05-08T15:20:22.951Z] GET /api/trending-topics
+[2026-05-08T15:20:22.961Z] GET /api/trending-topics
+[2026-05-08T15:20:22.963Z] GET /api/trending-topics
+[2026-05-08T15:20:23.016Z] GET /api/trending-topics
+[2026-05-08T15:20:39.672Z] GET /api/trending-topics
+[2026-05-08T15:24:47.255Z] GET /api/trending-topics
+[2026-05-08T15:24:47.585Z] GET /api/trending-topics

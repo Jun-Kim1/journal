@@ -83,6 +83,24 @@ const NANET_DETAIL_CONFIG = {
 	maxKeywordCount: 100
 };
 
+const TREND_KEYWORDS = [
+	'Large Language Models',
+	'Quantum Computing',
+	'Climate Change Modeling',
+	'CRISPR Gene Editing',
+	'Multimodal AI',
+	'Transformer Architecture',
+	'Federated Learning',
+	'Diffusion Models'
+];
+const TREND_CACHE_TTL_MS = 30 * 60 * 1000;
+let trendingTopicsCache = {
+	expiresAt: 0,
+	updatedAt: 0,
+	data: [],
+	meta: {}
+};
+
 let lastArxivRequestAt = 0;
 const dynamicExpansionCache = new Map();
 const ARXIV_XML_PARSER = new XMLParser({
@@ -135,6 +153,22 @@ const server = http.createServer(async (req, res) => {
 				console.error('[analyze] ERROR:', error.message);
 				throw error;
 			}
+			return;
+		}
+
+		if (req.method === 'GET' && requestUrl.pathname === '/api/trending-topics') {
+			const topN = clampNumber(Number(requestUrl.searchParams.get('topN') || 4), 4, 1, 8);
+			const forceRefresh = String(requestUrl.searchParams.get('refresh') || '').toLowerCase() === 'true';
+			const trendResult = await getTrendingTopics({ topN, forceRefresh });
+			sendJson(res, 200, {
+				ok: true,
+				data: trendResult.data,
+				meta: {
+					...trendResult.meta,
+					basis: '지난 30일 기준',
+					cached: !forceRefresh && Date.now() < trendingTopicsCache.expiresAt
+				}
+			});
 			return;
 		}
 
@@ -305,6 +339,21 @@ async function analyzeTopicSources(payload) {
 	const arxivResult = settled[4].status === 'fulfilled'
 		? settled[4].value
 		: handleSourceFailure('arXiv', settled[4].reason, warnings);
+
+	const kciSkipReason = String(kciResult?.meta?.reason || '');
+	const nanetSkipReason = String(nanetResult?.meta?.reason || '');
+	const kciKeyConfigured = Boolean(String(serviceKey || '').trim());
+	const nanetKeyConfigured = Boolean(String(nanetApiKey || '').trim());
+
+	if (!kciKeyConfigured || /No KCI service key/i.test(kciSkipReason)) {
+		warnings.push('KCI_API_KEY가 설정되지 않아 KCI 국내 논문 검색이 비활성화되었습니다. Render 환경변수에 KCI_API_KEY를 등록하세요.');
+	}
+	if (!nanetKeyConfigured || /NANET API key not configured|No NANET API key/i.test(nanetSkipReason)) {
+		warnings.push('NANET_API_KEY가 설정되지 않아 국회도서관 논문 검색이 비활성화되었습니다. Render 환경변수에 NANET_API_KEY를 등록하세요.');
+	}
+	if ((kciResult?.data?.length || 0) === 0 && (nanetResult?.data?.length || 0) === 0 && kciKeyConfigured && nanetKeyConfigured) {
+		warnings.push('국내 DB 응답이 0건입니다. API 키 권한/할당량, 호출 파라미터, 서버 IP 접근 제한 여부를 점검하세요.');
+	}
 	
 	console.log(`[sources] KCI: ${kciResult.data ? kciResult.data.length : 0}, NANET: ${nanetResult.data ? nanetResult.data.length : 0}, OpenAlex: ${openAlexResult.data ? openAlexResult.data.length : 0}, Crossref: ${crossrefResult.data ? crossrefResult.data.length : 0}, arXiv: ${arxivResult.data ? arxivResult.data.length : 0}`);
 	if (warnings.length > 0) {
@@ -344,6 +393,20 @@ async function analyzeTopicSources(payload) {
 		analysis,
 		meta: {
 			warnings,
+			diagnostics: {
+				keysConfigured: {
+					kci: kciKeyConfigured,
+					nanet: nanetKeyConfigured,
+					openalex: Boolean(String(openAlexApiKey || '').trim())
+				},
+				sourceSkipReasons: {
+					kci: kciSkipReason,
+					nanet: nanetSkipReason,
+					openalex: String(openAlexResult?.meta?.reason || ''),
+					crossref: String(crossrefResult?.meta?.reason || ''),
+					preprint: String(arxivResult?.meta?.reason || '')
+				}
+			},
 			translatedTopic,
 			globalQueryTopic,
 			queryPack,
@@ -377,6 +440,234 @@ async function analyzeTopicSources(payload) {
 		}
 	};
 }
+
+function formatDateYmd(date) {
+	const year = date.getFullYear();
+	const month = String(date.getMonth() + 1).padStart(2, '0');
+	const day = String(date.getDate()).padStart(2, '0');
+	return `${year}-${month}-${day}`;
+}
+
+function formatArxivDate(date, endOfDay = false) {
+	const ymd = formatDateYmd(date).replace(/-/g, '');
+	return `${ymd}${endOfDay ? '2359' : '0000'}`;
+}
+
+function getTrendDateRanges() {
+	const today = new Date();
+	const recentEnd = new Date(today);
+	const recentStart = new Date(today);
+	recentStart.setDate(recentStart.getDate() - 30);
+
+	const prevEnd = new Date(recentStart);
+	prevEnd.setDate(prevEnd.getDate() - 1);
+	const prevStart = new Date(prevEnd);
+	prevStart.setDate(prevStart.getDate() - 30);
+
+	return {
+		recentStart,
+		recentEnd,
+		prevStart,
+		prevEnd,
+		recentStartYmd: formatDateYmd(recentStart),
+		recentEndYmd: formatDateYmd(recentEnd),
+		prevStartYmd: formatDateYmd(prevStart),
+		prevEndYmd: formatDateYmd(prevEnd)
+	};
+}
+
+function computeGrowthRate(recentTotal, prevTotal) {
+	if (prevTotal <= 0) {
+		return recentTotal > 0 ? 100 : 0;
+	}
+	return Math.round((((recentTotal - prevTotal) / prevTotal) * 100) * 10) / 10;
+}
+
+function parseIntegerCount(value) {
+	const num = Number(value);
+	if (!Number.isFinite(num) || num < 0) {
+		return 0;
+	}
+	return Math.round(num);
+}
+
+async function fetchCrossrefTrendCount(keyword, fromDate, toDate) {
+	const url = new URL(`${CROSSREF_CONFIG.baseUrl}${CROSSREF_CONFIG.worksPath}`);
+	url.searchParams.set('query', keyword);
+	url.searchParams.set('filter', `from-pub-date:${fromDate},until-pub-date:${toDate}`);
+	url.searchParams.set('rows', '0');
+	url.searchParams.set('mailto', CROSSREF_MAILTO);
+
+	const json = await fetchJsonWithRetries(url.toString(), {
+		headers: {
+			Accept: 'application/json',
+			'User-Agent': `global-paper-analyzer/1.0 (mailto:${CROSSREF_MAILTO})`
+		},
+		errorContext: 'Crossref trend'
+	});
+
+	return parseIntegerCount(json?.message?.['total-results']);
+}
+
+async function fetchArxivTrendCount(keyword, fromDate, toDate) {
+	const fromArxiv = formatArxivDate(new Date(fromDate), false);
+	const toArxiv = formatArxivDate(new Date(toDate), true);
+	const url = new URL(ARXIV_CONFIG.baseUrl);
+	url.searchParams.set('search_query', `all:"${keyword}" AND submittedDate:[${fromArxiv} TO ${toArxiv}]`);
+	url.searchParams.set('start', '0');
+	url.searchParams.set('max_results', '1');
+
+	const xml = await fetchArxivXmlWithThrottle(url.toString());
+	const match = String(xml || '').match(/<opensearch:totalResults[^>]*>(\d+)<\/opensearch:totalResults>/i);
+	return parseIntegerCount(match ? match[1] : 0);
+}
+
+async function fetchKciTrendCount(keyword) {
+	const serviceKey = KCI_CONFIG.defaultServiceKey;
+	if (!serviceKey) {
+		return 0;
+	}
+
+	const requestUrl = buildKciDatasetUrl({
+		topic: keyword,
+		paperType: '',
+		field: 'all',
+		perPage: 1,
+		serviceKey,
+		serviceKeyMode: 'auto'
+	});
+
+	const json = await fetchJsonWithRetries(requestUrl, {
+		headers: { Accept: 'application/json' },
+		errorContext: 'KCI trend'
+	});
+
+	return parseIntegerCount(
+		json?.totalCount
+		|| json?.matchCount
+		|| json?.currentCount
+		|| (Array.isArray(json?.data) ? json.data.length : 0)
+		|| extractKciRecords(json).length
+	);
+}
+
+async function fetchNanetTrendCount(keyword, fromDate, toDate) {
+	const apiKey = NANET_CONFIG.apiKey;
+	if (!apiKey) {
+		return 0;
+	}
+
+	const url = new URL(NANET_CONFIG.baseUrl);
+	url.searchParams.set('key', apiKey);
+	url.searchParams.set('query', keyword);
+	url.searchParams.set('pageSize', '1');
+	url.searchParams.set('pageNum', '1');
+	url.searchParams.set('resultType', 'json');
+	url.searchParams.set('sort', 'RANK');
+	url.searchParams.set('startDate', String(fromDate || '').replace(/-/g, ''));
+	url.searchParams.set('endDate', String(toDate || '').replace(/-/g, ''));
+
+	const json = await fetchJsonWithRetries(url.toString(), {
+		headers: { Accept: 'application/json' },
+		errorContext: 'NANET trend'
+	});
+
+	return parseIntegerCount(json?.totalCount || json?.result?.totalCount || 0);
+}
+
+async function fetchTrendCountsForWindow(keyword, fromDate, toDate) {
+	const settled = await Promise.allSettled([
+		fetchCrossrefTrendCount(keyword, fromDate, toDate),
+		fetchArxivTrendCount(keyword, fromDate, toDate),
+		fetchKciTrendCount(keyword),
+		fetchNanetTrendCount(keyword, fromDate, toDate)
+	]);
+
+	const names = ['crossref', 'arxiv', 'kci', 'nanet'];
+	const bySource = {};
+	const errors = {};
+
+	settled.forEach((result, idx) => {
+		const source = names[idx];
+		if (result.status === 'fulfilled') {
+			bySource[source] = parseIntegerCount(result.value);
+			return;
+		}
+		bySource[source] = 0;
+		errors[source] = String(result.reason?.message || result.reason || 'unknown error');
+	});
+
+	const total = Object.values(bySource).reduce((sum, value) => sum + parseIntegerCount(value), 0);
+	return { total, bySource, errors };
+}
+
+async function fetchCountsForTrendKeyword(keyword, ranges) {
+	const recent = await fetchTrendCountsForWindow(keyword, ranges.recentStartYmd, ranges.recentEndYmd);
+	const previous = await fetchTrendCountsForWindow(keyword, ranges.prevStartYmd, ranges.prevEndYmd);
+
+	return {
+		topic: keyword,
+		recent_count: recent.total,
+		growth_rate: computeGrowthRate(recent.total, previous.total),
+		sources: {
+			recent: recent.bySource,
+			previous: previous.bySource
+		},
+		errors: {
+			recent: recent.errors,
+			previous: previous.errors
+		}
+	};
+}
+
+async function getTrendingTopics(options) {
+	const topN = clampNumber(options?.topN, 4, 1, 8);
+	const forceRefresh = Boolean(options?.forceRefresh);
+	const now = Date.now();
+	if (!forceRefresh && trendingTopicsCache.expiresAt > now && Array.isArray(trendingTopicsCache.data) && trendingTopicsCache.data.length) {
+		return {
+			data: trendingTopicsCache.data.slice(0, topN),
+			meta: {
+				updatedAt: trendingTopicsCache.updatedAt,
+				dateRange: trendingTopicsCache.meta.dateRange || null
+			}
+		};
+	}
+
+	const ranges = getTrendDateRanges();
+	const settled = await Promise.allSettled(
+		TREND_KEYWORDS.map((keyword) => fetchCountsForTrendKeyword(keyword, ranges))
+	);
+
+	const valid = settled
+		.filter((result) => result.status === 'fulfilled')
+		.map((result) => result.value)
+		.sort((a, b) => (Number(b.growth_rate || 0) - Number(a.growth_rate || 0)) || (Number(b.recent_count || 0) - Number(a.recent_count || 0)));
+
+	const data = valid.slice(0, topN);
+	trendingTopicsCache = {
+		expiresAt: now + TREND_CACHE_TTL_MS,
+		updatedAt: now,
+		data,
+		meta: {
+			dateRange: {
+				recentStart: ranges.recentStartYmd,
+				recentEnd: ranges.recentEndYmd,
+				previousStart: ranges.prevStartYmd,
+				previousEnd: ranges.prevEndYmd
+			}
+		}
+	};
+
+	return {
+		data,
+		meta: {
+			updatedAt: now,
+			dateRange: trendingTopicsCache.meta.dateRange
+		}
+	};
+}
+
 function handleSourceFailure(sourceName, error, warnings) {
 	let message = '일부 외부 데이터망 응답이 지연되어 수집 범위를 자동 조정했습니다.';
 	if (sourceName === 'KCI' || sourceName === 'NANET') {
@@ -444,15 +735,36 @@ async function searchKciPapers(options) {
 		return { data: [], meta: { skipped: true, reason: 'No KCI service key' } };
 	}
 
-	const perType = Math.max(10, Math.ceil(pageSize / paperTypes.length));
-	const responses = await Promise.all(paperTypes.map(async (paperType) => {
-		const upstreamUrl = buildKciDatasetUrl({ topic, paperType, field, perPage: perType, serviceKey, serviceKeyMode });
+	const queryVariants = buildKoreanDomesticQueryVariants(topic);
+	const perType = Math.max(10, Math.ceil(pageSize / Math.max(1, paperTypes.length)));
+	const requests = [];
+
+	for (const paperType of paperTypes) {
+		for (const query of queryVariants) {
+			requests.push({ paperType, query, useTypeFilter: true });
+		}
+		// 타입 필터가 너무 좁아 결과가 사라지는 경우를 대비한 백업 쿼리
+		requests.push({ paperType, query: queryVariants[0] || topic, useTypeFilter: false });
+	}
+
+	const responses = await Promise.all(requests.map(async ({ paperType, query, useTypeFilter }) => {
+		const effectiveType = useTypeFilter ? paperType : '';
+		const upstreamUrl = buildKciDatasetUrl({
+			topic: query,
+			paperType: effectiveType,
+			field,
+			perPage: perType,
+			serviceKey,
+			serviceKeyMode
+		});
 		const json = await fetchJsonWithRetries(upstreamUrl, {
 			headers: { Accept: 'application/json' },
 			errorContext: `KCI ${paperType}`
 		});
 		return {
 			paperType,
+			query,
+			useTypeFilter,
 			url: upstreamUrl,
 			items: extractKciRecords(json).map(normalizeKciRecord).filter(Boolean)
 		};
@@ -463,7 +775,8 @@ async function searchKciPapers(options) {
 		data: merged,
 		meta: {
 			totalFetched: merged.length,
-			upstreamUrls: responses.map((entry) => entry.url)
+			queryVariants,
+			upstreamUrls: responses.map((entry) => redactSensitiveUrl(entry.url))
 		}
 	};
 }
@@ -702,6 +1015,40 @@ function safeParseExpansionPayload(content) {
 	}
 }
 
+const KO_TO_EN_TERMS = {
+	'자기효능감': 'self-efficacy self-confidence psychological empowerment',
+	'자기효능': 'self-efficacy',
+	'생성형 ai': 'generative ai',
+	'생성형ai': 'generative ai',
+	'프로그래머': 'programmer software developer',
+	'개발자': 'developer software engineer',
+	'활용': 'utilization use impact',
+	'영향': 'impact effect influence',
+	'교사': 'teacher',
+	'학생': 'student',
+	'학습': 'learning'
+};
+
+function koreanTermExpansion(text) {
+	const input = String(text || '').trim();
+	if (!input) {
+		return '';
+	}
+
+	const appendedTerms = [];
+	for (const [ko, en] of Object.entries(KO_TO_EN_TERMS)) {
+		if (input.toLowerCase().includes(ko.toLowerCase())) {
+			appendedTerms.push(en);
+		}
+	}
+
+	if (!appendedTerms.length) {
+		return input;
+	}
+
+	return `${input} ${dedupeStringArray(appendedTerms).join(' ')}`.trim();
+}
+
 async function requestLlmKeywordExpansion(keyword, translatedKeyword) {
 	if (!LLM_EXPANSION_CONFIG.apiKey) {
 		return null;
@@ -809,7 +1156,11 @@ function buildGlobalQueryText(topic, translatedTopic) {
 		return translated || original;
 	}
 
-	const englishTerms = expandKoreanAcademicTerms(original);
+	const expandedOriginal = koreanTermExpansion(original);
+	const englishTerms = dedupeStringArray([
+		...expandKoreanAcademicTerms(expandedOriginal),
+		...koreanTermExpansion(original).split(/\s+/).filter((token) => /[a-z]/i.test(token))
+	]);
 	const candidate = [];
 	if (
 		translated
@@ -821,6 +1172,17 @@ function buildGlobalQueryText(topic, translatedTopic) {
 	}
 	if (englishTerms.length) {
 		candidate.push(englishTerms.join(' '));
+	}
+
+	if (/자기효능감/.test(original) || /self-efficacy/i.test(translated)) {
+		candidate.push([
+			'self-efficacy',
+			'self-confidence',
+			'programmer self-efficacy',
+			'developer confidence',
+			'software engineer motivation',
+			'not teachers not students'
+		].join(' '));
 	}
 
 	if (!candidate.length) {
@@ -841,7 +1203,7 @@ async function buildQueryPack(topic) {
 	]);
 	
 	const baseEnglishQuery = buildGlobalQueryText(primaryQueryKo, translatedTopic);
-	const expansionTargets = coreKeywordsKo.slice(0, 2); // 최대 2개만 확장
+	const expansionTargets = coreKeywordsKo.slice(0, 4);
 	
 	// 병렬 확장 - 실패 안전
 	const keywordExpansions = await Promise.allSettled(
@@ -861,11 +1223,15 @@ async function buildQueryPack(topic) {
 		})
 	);
 	
+	const selfEfficacyHints = /자기효능감|self-efficacy/i.test(primaryQueryKo)
+		? ['self-efficacy', 'self-confidence', 'developer confidence', 'programmer']
+		: [];
+
 	const coreKeywordsEn = dedupeStringArray(keywordExpansions.flatMap((item) => [
 		...(item.synonyms || []).slice(0, 1),
 		...(item.entities || []).slice(0, 1),
 		item.fallbackTranslation || ''
-	]));
+	]).concat(selfEfficacyHints));
 
 	const primaryQueryEn = dedupeStringArray([
 		...tokenizeEnglish(baseEnglishQuery),
@@ -874,7 +1240,7 @@ async function buildQueryPack(topic) {
 
 	// 확장 쿼리 생성을 단순화
 	const expandedQueries = [];
-	for (const expansion of keywordExpansions.slice(0, 1)) {
+	for (const expansion of keywordExpansions.slice(0, 2)) {
 		for (const alternative of (expansion.entities || []).slice(0, 2)) {
 			expandedQueries.push(dedupeStringArray([...tokenizeEnglish(primaryQueryEn), ...alternative.split(/\s+/)]).slice(0, 24).join(' '));
 		}
@@ -886,7 +1252,7 @@ async function buildQueryPack(topic) {
 		translatedTopic,
 		globalQueryTopic: primaryQueryEn,
 		expandedQueries: dedupeStringArray(expandedQueries.filter(Boolean)).filter((query) => query && query !== primaryQueryEn).slice(0, 3),
-		coreKeywordsKo: coreKeywordsKo.slice(0, 2),
+		coreKeywordsKo: coreKeywordsKo.slice(0, 4),
 		coreKeywordsEn: dedupeStringArray(coreKeywordsEn),
 		keywordExpansionSources: keywordExpansions.map((item) => ({
 			keyword: item.keyword || '',
@@ -899,6 +1265,8 @@ async function buildQueryPack(topic) {
 
 function extractCoreKeywords(topic) {
 	const text = String(topic || '').trim();
+	const priorityTerms = ['자기효능감', '프로그래머', '개발자', '소프트웨어', '생성형', '인공지능', 'ai'];
+	const prioritized = priorityTerms.filter((term) => text.toLowerCase().includes(term.toLowerCase()));
 	const matchedDictionaryTerms = [
 		...Object.keys(CONCEPT_SYNONYM_MAP).filter((keyword) => text.includes(keyword)),
 		...Object.keys(ENTITY_SUBSTITUTION_MAP).filter((keyword) => text.includes(keyword))
@@ -910,7 +1278,7 @@ function extractCoreKeywords(topic) {
 		.map((token) => token.trim())
 		.filter((token) => token.length >= 2);
 
-	return dedupeStringArray([...matchedDictionaryTerms, ...tokenCandidates]).slice(0, 8);
+	return dedupeStringArray([...prioritized, ...matchedDictionaryTerms, ...tokenCandidates]).slice(0, 10);
 }
 
 function isLowConfidenceTranslation(text) {
@@ -1016,8 +1384,66 @@ function filterByDomainRelevance(papers, mustKeywordsByCategory) {
 		.sort((a, b) => b.boost - a.boost)
 		.map((item) => item.paper);
 
+	if (!scored.length && papers.length) {
+		// 엄격 필터로 0건이 되면 도메인 부스트 상위 논문을 최소한으로 반환
+		const fallback = papers
+			.map((paper) => ({ paper, boost: computePaperDomainBoostScore(paper, mustKeywordsByCategory) }))
+			.filter((item) => item.boost >= 0.08)
+			.sort((a, b) => b.boost - a.boost)
+			.slice(0, Math.min(12, papers.length))
+			.map((item) => item.paper);
+		console.log(`[domain-filter] strict 결과 0건, fallback ${fallback.length}건 반환`);
+		return fallback;
+	}
+
 	console.log(`[domain-filter] ${scored.length}/${papers.length}개 논문이 도메인 필터 통과`);
 	return scored;
+}
+
+function buildKoreanDomesticQueryVariants(topic) {
+	const base = String(topic || '').trim();
+	if (!base) {
+		return [];
+	}
+
+	const normalized = base
+		.replace(/["'`]/g, ' ')
+		.replace(/[()\[\]{}]/g, ' ')
+		.replace(/\s+/g, ' ')
+		.trim();
+
+	const keywords = extractCoreKeywords(normalized)
+		.filter((token) => /[가-힣a-zA-Z]/.test(token))
+		.filter((token) => !['영향', '효과', '활용', '연구', '분석', '중심', '미치는', '대한'].includes(token))
+		.slice(0, 6);
+
+	const pairs = [];
+	for (let i = 0; i < keywords.length; i += 1) {
+		for (let j = i + 1; j < keywords.length; j += 1) {
+			pairs.push(`${keywords[i]} ${keywords[j]}`);
+		}
+	}
+
+	return dedupeStringArray([
+		normalized,
+		...keywords,
+		...pairs
+	]).slice(0, 8);
+}
+
+function redactSensitiveUrl(value) {
+	try {
+		const url = new URL(String(value || ''));
+		if (url.searchParams.has('serviceKey')) {
+			url.searchParams.set('serviceKey', '***');
+		}
+		if (url.searchParams.has('key')) {
+			url.searchParams.set('key', '***');
+		}
+		return url.toString();
+	} catch (_error) {
+		return String(value || '');
+	}
 }
 
 // BM25-스타일 도메인 키워드 부스트 점수 계산 (0.0 ~ 1.0)
