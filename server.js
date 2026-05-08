@@ -36,7 +36,7 @@ const {
 const ARXIV_CONFIG = {
 	baseUrl: 'https://export.arxiv.org/api/query',
 	minIntervalMs: 3000,
-	maxResultsCap: 60
+	maxResultsCap: 150
 };
 
 const OPENALEX_CONFIG = {
@@ -94,6 +94,9 @@ const TREND_KEYWORDS = [
 	'Diffusion Models'
 ];
 const TREND_CACHE_TTL_MS = 30 * 60 * 1000;
+const TREND_MIN_GROWTH_RATE = 5;
+const TREND_MIN_RECENT_COUNT = 1;
+const TREND_MIN_SOURCE_SUCCESS = 2;
 let trendingTopicsCache = {
 	expiresAt: 0,
 	updatedAt: 0,
@@ -160,12 +163,16 @@ const server = http.createServer(async (req, res) => {
 			const topN = clampNumber(Number(requestUrl.searchParams.get('topN') || 4), 4, 1, 8);
 			const forceRefresh = String(requestUrl.searchParams.get('refresh') || '').toLowerCase() === 'true';
 			const trendResult = await getTrendingTopics({ topN, forceRefresh });
+			const range = trendResult.meta && trendResult.meta.dateRange ? trendResult.meta.dateRange : null;
+			const basisText = range
+				? `최근 30일 API 집계 (${range.recentStart}~${range.recentEnd}) · 상승률 +${TREND_MIN_GROWTH_RATE}% 이상`
+				: `최근 30일 API 집계 · 상승률 +${TREND_MIN_GROWTH_RATE}% 이상`;
 			sendJson(res, 200, {
 				ok: true,
 				data: trendResult.data,
 				meta: {
 					...trendResult.meta,
-					basis: '지난 30일 기준',
+					basis: basisText,
 					cached: !forceRefresh && Date.now() < trendingTopicsCache.expiresAt
 				}
 			});
@@ -229,7 +236,7 @@ async function analyzeTopicSources(payload) {
 	const currentYear = new Date().getFullYear();
 	const fromYear = currentYear - rangeYears + 1;
 	const untilYear = currentYear;
-	const pageSize = clampNumber(payload.pageSize, 80, 20, 200);
+	const pageSize = clampNumber(payload.pageSize, 160, 20, 400);
 	const field = String(payload.field || 'all');
 	
 	// 기본값 설정: paperTypes와 globalTypes가 비어있으면 기본값 사용
@@ -361,11 +368,82 @@ async function analyzeTopicSources(payload) {
 	}
 	const mergedDomestic = mergeDomesticSources(kciResult.data, nanetResult.data);
 	const mergedGlobal = mergeGlobalSources(openAlexResult.data, crossrefResult.data, arxivResult.data);
-	const merged = improvedDedupeByIdentifiers([...mergedDomestic, ...mergedGlobal]);
+	let merged = improvedDedupeByIdentifiers([...mergedDomestic, ...mergedGlobal]);
+
+	if (merged.length === 0) {
+		const recoveryQuery = dedupeStringArray([
+			translatedTopic,
+			globalQueryTopic,
+			topic
+		]).find(Boolean) || topic;
+		try {
+			const [openAlexRecovery, crossrefRecovery] = await Promise.all([
+				searchOpenAlexWorks({
+					topic,
+					translatedTopic: recoveryQuery,
+					fromYear,
+					untilYear,
+					globalTypes: globalTypesResult,
+					pageSize: Math.max(120, pageSize),
+					apiKey: openAlexApiKey,
+					mailto: openAlexMailto,
+					strictRelevance: false
+				}),
+				searchCrossrefPapers({
+					topic,
+					translatedTopic: recoveryQuery,
+					fromYear,
+					untilYear,
+					pageSize: Math.max(100, Math.round(pageSize * 0.7)),
+					globalTypes: globalTypesResult,
+					strictRelevance: false
+				})
+			]);
+			const recoveryMerged = improvedDedupeByIdentifiers([
+				...(openAlexRecovery.data || []),
+				...(crossrefRecovery.data || [])
+			]);
+			if (recoveryMerged.length > 0) {
+				warnings.push('일부 API 응답 저하로 글로벌 복구 검색을 적용했습니다.');
+				merged = recoveryMerged;
+			}
+		} catch (recoveryError) {
+			warnings.push(`복구 검색 시도 실패: ${String(recoveryError?.message || recoveryError || 'unknown')}`);
+		}
+	}
+
+	const sourceResults = {
+		kci: kciResult,
+		nanet: nanetResult,
+		openalex: openAlexResult,
+		crossref: crossrefResult,
+		preprint: arxivResult
+	};
+	const sourceFailureFlags = Object.fromEntries(
+		Object.entries(sourceResults).map(([name, result]) => [name, isSourceFetchFailure(result)])
+	);
+	const failedSources = Object.entries(sourceFailureFlags)
+		.filter(([, failed]) => failed)
+		.map(([name]) => name);
 
 	// 도메인 필수 키워드 감지 및 필터링 (요구사항 2, 3)
 	const domainMustKeywords = buildDomainMustKeywords(queryPack);
 	const domainFiltered = filterByDomainRelevance(merged, domainMustKeywords);
+
+	if (domainFiltered.length === 0 && merged.length === 0 && failedSources.length) {
+		const failureDetail = failedSources
+			.map((name) => {
+				const reason = sourceResults[name] && sourceResults[name].meta ? String(sourceResults[name].meta.reason || '') : '';
+				return reason ? `${name}:${reason}` : name;
+			})
+			.join(' | ')
+			.slice(0, 600);
+
+		throw createError(
+			502,
+			`논문 DB 연결 실패로 분석을 중단했습니다. 잠시 후 다시 시도해주세요. 실패 소스: ${failedSources.join(', ')}${failureDetail ? ` (${failureDetail})` : ''}`
+		);
+	}
 
 	const analysis = buildAnalysisReport({
 		topic,
@@ -394,6 +472,10 @@ async function analyzeTopicSources(payload) {
 		meta: {
 			warnings,
 			diagnostics: {
+				sourceFailure: {
+					failedSources,
+					hasCriticalFailure: failedSources.length > 0
+				},
 				keysConfigured: {
 					kci: kciKeyConfigured,
 					nanet: nanetKeyConfigured,
@@ -439,6 +521,42 @@ async function analyzeTopicSources(payload) {
 			}
 		}
 	};
+}
+
+function isExpectedSourceSkipReason(reason) {
+	const text = String(reason || '').toLowerCase();
+	if (!text) return false;
+	return (
+		text.includes('disabled by user')
+		|| text.includes('api key not configured')
+		|| text.includes('no kci service key')
+		|| text.includes('no nanet api key')
+		|| text.includes('no global type selected')
+		|| text.includes('no crossref-compatible type selected')
+		|| text.includes('no query variants available')
+	);
+}
+
+function isSourceFetchFailure(result) {
+	const dataCount = Array.isArray(result && result.data) ? result.data.length : 0;
+	if (dataCount > 0) {
+		return false;
+	}
+
+	const meta = (result && typeof result.meta === 'object') ? result.meta : {};
+	const reason = String(meta.reason || '').trim();
+	const reasons = Array.isArray(meta.reasons) ? meta.reasons : [];
+	const queries = Array.isArray(meta.queries) ? meta.queries : [];
+
+	if (meta.skipped && reason && !isExpectedSourceSkipReason(reason)) {
+		return true;
+	}
+
+	if (reasons.length && (!queries.length || reasons.length >= queries.length)) {
+		return true;
+	}
+
+	return false;
 }
 
 function formatDateYmd(date) {
@@ -522,19 +640,23 @@ async function fetchArxivTrendCount(keyword, fromDate, toDate) {
 	return parseIntegerCount(match ? match[1] : 0);
 }
 
-async function fetchKciTrendCount(keyword) {
+async function fetchKciTrendCount(keyword, fromDate, toDate) {
 	const serviceKey = KCI_CONFIG.defaultServiceKey;
 	if (!serviceKey) {
 		return 0;
 	}
 
+	const fromYear = Number(String(fromDate || '').slice(0, 4));
+	const toYear = Number(String(toDate || '').slice(0, 4));
 	const requestUrl = buildKciDatasetUrl({
 		topic: keyword,
 		paperType: '',
 		field: 'all',
 		perPage: 1,
 		serviceKey,
-		serviceKeyMode: 'auto'
+		serviceKeyMode: 'auto',
+		fromYear,
+		toYear
 	});
 
 	const json = await fetchJsonWithRetries(requestUrl, {
@@ -579,17 +701,19 @@ async function fetchTrendCountsForWindow(keyword, fromDate, toDate) {
 	const settled = await Promise.allSettled([
 		fetchCrossrefTrendCount(keyword, fromDate, toDate),
 		fetchArxivTrendCount(keyword, fromDate, toDate),
-		fetchKciTrendCount(keyword),
+		fetchKciTrendCount(keyword, fromDate, toDate),
 		fetchNanetTrendCount(keyword, fromDate, toDate)
 	]);
 
 	const names = ['crossref', 'arxiv', 'kci', 'nanet'];
 	const bySource = {};
 	const errors = {};
+	let successSourceCount = 0;
 
 	settled.forEach((result, idx) => {
 		const source = names[idx];
 		if (result.status === 'fulfilled') {
+			successSourceCount += 1;
 			bySource[source] = parseIntegerCount(result.value);
 			return;
 		}
@@ -598,25 +722,35 @@ async function fetchTrendCountsForWindow(keyword, fromDate, toDate) {
 	});
 
 	const total = Object.values(bySource).reduce((sum, value) => sum + parseIntegerCount(value), 0);
-	return { total, bySource, errors };
+	return { total, bySource, errors, successSourceCount };
 }
 
 async function fetchCountsForTrendKeyword(keyword, ranges) {
 	const recent = await fetchTrendCountsForWindow(keyword, ranges.recentStartYmd, ranges.recentEndYmd);
 	const previous = await fetchTrendCountsForWindow(keyword, ranges.prevStartYmd, ranges.prevEndYmd);
+	const growthRate = computeGrowthRate(recent.total, previous.total);
 
 	return {
 		topic: keyword,
 		recent_count: recent.total,
-		growth_rate: computeGrowthRate(recent.total, previous.total),
+		previous_count: previous.total,
+		growth_rate: growthRate,
 		sources: {
 			recent: recent.bySource,
 			previous: previous.bySource
 		},
+		source_status: {
+			recent_success: recent.successSourceCount,
+			previous_success: previous.successSourceCount,
+			required_success: TREND_MIN_SOURCE_SUCCESS
+		},
 		errors: {
 			recent: recent.errors,
 			previous: previous.errors
-		}
+		},
+		is_trending_candidate: recent.total >= TREND_MIN_RECENT_COUNT
+			&& growthRate >= TREND_MIN_GROWTH_RATE
+			&& recent.successSourceCount >= TREND_MIN_SOURCE_SUCCESS
 	};
 }
 
@@ -629,7 +763,9 @@ async function getTrendingTopics(options) {
 			data: trendingTopicsCache.data.slice(0, topN),
 			meta: {
 				updatedAt: trendingTopicsCache.updatedAt,
-				dateRange: trendingTopicsCache.meta.dateRange || null
+				dateRange: trendingTopicsCache.meta.dateRange || null,
+				criteria: trendingTopicsCache.meta.criteria || null,
+				sampleSize: trendingTopicsCache.meta.sampleSize || 0
 			}
 		};
 	}
@@ -639,12 +775,25 @@ async function getTrendingTopics(options) {
 		TREND_KEYWORDS.map((keyword) => fetchCountsForTrendKeyword(keyword, ranges))
 	);
 
-	const valid = settled
+	const fulfilled = settled
 		.filter((result) => result.status === 'fulfilled')
 		.map((result) => result.value)
+		.filter((item) => Number(item.recent_count || 0) > 0)
+		.filter((item) => Number(item.source_status?.recent_success || 0) >= TREND_MIN_SOURCE_SUCCESS);
+
+	const strictTrending = fulfilled
+		.filter((item) => Number(item.growth_rate || 0) >= TREND_MIN_GROWTH_RATE)
 		.sort((a, b) => (Number(b.growth_rate || 0) - Number(a.growth_rate || 0)) || (Number(b.recent_count || 0) - Number(a.recent_count || 0)));
 
-	const data = valid.slice(0, topN);
+	const seenTopics = new Set();
+	const data = strictTrending.filter((item) => {
+		const key = String(item.topic || '').trim().toLowerCase();
+		if (!key || seenTopics.has(key)) {
+			return false;
+		}
+		seenTopics.add(key);
+		return true;
+	}).slice(0, topN);
 	trendingTopicsCache = {
 		expiresAt: now + TREND_CACHE_TTL_MS,
 		updatedAt: now,
@@ -655,7 +804,17 @@ async function getTrendingTopics(options) {
 				recentEnd: ranges.recentEndYmd,
 				previousStart: ranges.prevStartYmd,
 				previousEnd: ranges.prevEndYmd
-			}
+			},
+			criteria: {
+				minRecentCount: TREND_MIN_RECENT_COUNT,
+				minGrowthRate: TREND_MIN_GROWTH_RATE,
+				minSourceSuccess: TREND_MIN_SOURCE_SUCCESS,
+				sort: 'growth_then_volume',
+				excludeNegativeGrowth: true,
+				excludeZeroRecentCount: true,
+				strictTrendingOnly: true
+			},
+			sampleSize: fulfilled.length
 		}
 	};
 
@@ -663,7 +822,9 @@ async function getTrendingTopics(options) {
 		data,
 		meta: {
 			updatedAt: now,
-			dateRange: trendingTopicsCache.meta.dateRange
+			dateRange: trendingTopicsCache.meta.dateRange,
+			criteria: trendingTopicsCache.meta.criteria,
+			sampleSize: trendingTopicsCache.meta.sampleSize
 		}
 	};
 }
@@ -782,12 +943,13 @@ async function searchKciPapers(options) {
 }
 
 async function searchCrossrefPapers(options) {
-	const { translatedTopic, fromYear, untilYear, pageSize, globalTypes = ['journal'] } = options;
+	const { translatedTopic, fromYear, untilYear, pageSize, globalTypes = ['journal'], strictRelevance = true } = options;
 	if (!globalTypes.length) {
 		return { data: [], nextCursor: '', meta: { skipped: true, reason: 'No global type selected' } };
 	}
 	const queryTokens = tokenizeEnglish(translatedTopic);
-	const perPage = Math.min(50, Math.max(20, Math.ceil(pageSize / 2)));
+	const perPage = Math.min(50, Math.max(20, Math.ceil(pageSize / 4)));
+	const maxPages = Math.min(10, Math.max(2, Math.ceil(pageSize / perPage)));
 	const typeFilter = buildCrossrefTypeFilter(globalTypes);
 	if (!typeFilter) {
 		return { data: [], nextCursor: '', meta: { skipped: true, reason: 'No Crossref-compatible type selected' } };
@@ -797,7 +959,7 @@ async function searchCrossrefPapers(options) {
 	let page = 0;
 	const urls = [];
 
-	while (records.length < pageSize && cursor && page < 4) {
+	while (records.length < pageSize && cursor && page < maxPages) {
 		const url = buildCrossrefUrl({ translatedTopic, fromYear, untilYear, cursor, rows: perPage, typeFilter });
 		urls.push(url);
 		const json = await fetchJsonWithRetries(url, {
@@ -814,7 +976,7 @@ async function searchCrossrefPapers(options) {
 			items
 				.map(normalizeCrossrefRecord)
 				.filter(Boolean)
-				.filter((record) => isRelevantCrossrefRecord(record, queryTokens))
+				.filter((record) => (strictRelevance ? isRelevantCrossrefRecord(record, queryTokens) : true))
 		);
 		cursor = message['next-cursor'] || '';
 		page += 1;
@@ -834,39 +996,55 @@ async function searchCrossrefPapers(options) {
 }
 
 async function searchOpenAlexWorks(options) {
-	const { translatedTopic, fromYear, untilYear, globalTypes, pageSize, apiKey, mailto } = options;
+	const { translatedTopic, fromYear, untilYear, globalTypes, pageSize, apiKey, mailto, strictRelevance = true } = options;
 
 	const queryTokens = tokenizeEnglish(translatedTopic);
-	const perPage = Math.min(OPENALEX_CONFIG.perPageCap, Math.max(20, pageSize));
-	const requestUrl = buildOpenAlexUrl({
-		translatedTopic,
-		fromYear,
-		untilYear,
-		globalTypes,
-		perPage,
-		apiKey,
-		mailto
-	});
-	const json = await fetchJsonWithRetries(requestUrl, {
-		headers: {
-			Accept: 'application/json',
-			'User-Agent': `global-paper-analyzer/1.0 (mailto:${mailto || CROSSREF_MAILTO})`
-		},
-		errorContext: 'OpenAlex'
-	});
+	const perPage = Math.min(OPENALEX_CONFIG.perPageCap, Math.max(25, Math.min(pageSize, 100)));
+	const maxPages = Math.min(6, Math.max(1, Math.ceil(pageSize / perPage)));
+	const urls = [];
+	let records = [];
 
-	const items = Array.isArray(json?.results) ? json.results : [];
-	const records = items
-		.map(normalizeOpenAlexRecord)
-		.filter(Boolean)
-		.filter((record) => isRelevantCrossrefRecord(record, queryTokens));
+	for (let page = 1; page <= maxPages && records.length < pageSize; page += 1) {
+		const requestUrl = buildOpenAlexUrl({
+			translatedTopic,
+			fromYear,
+			untilYear,
+			globalTypes,
+			perPage,
+			apiKey,
+			mailto,
+			page
+		});
+		urls.push(requestUrl);
+
+		const json = await fetchJsonWithRetries(requestUrl, {
+			headers: {
+				Accept: 'application/json',
+				'User-Agent': `global-paper-analyzer/1.0 (mailto:${mailto || CROSSREF_MAILTO})`
+			},
+			errorContext: 'OpenAlex'
+		});
+
+		const items = Array.isArray(json?.results) ? json.results : [];
+		records = records.concat(
+			items
+				.map(normalizeOpenAlexRecord)
+				.filter(Boolean)
+				.filter((record) => (strictRelevance ? isRelevantCrossrefRecord(record, queryTokens) : true))
+		);
+
+		if (!items.length || items.length < perPage) {
+			break;
+		}
+	}
+
+	records = dedupeNormalizedRecords(records).slice(0, pageSize);
 
 	return {
 		data: records,
 		meta: {
 			totalFetched: records.length,
-			requestUrl,
-			count: Number(json?.meta?.count) || records.length
+			requestUrls: urls
 		}
 	};
 }
@@ -1463,7 +1641,7 @@ function computePaperDomainBoostScore(paper, mustKeywordsByCategory) {
 }
 
 function buildKciDatasetUrl(options) {
-	const { topic, paperType, field, perPage, serviceKey, serviceKeyMode } = options;
+	const { topic, paperType, field, perPage, serviceKey, serviceKeyMode, fromYear, toYear } = options;
 	const params = new URLSearchParams();
 	params.set('returnType', 'json');
 	params.set('page', '1');
@@ -1476,6 +1654,12 @@ function buildKciDatasetUrl(options) {
 	}
 	if (field && field !== 'all') {
 		params.set('cond[학문분야::LIKE]', field);
+	}
+	if (Number.isFinite(Number(fromYear))) {
+		params.set('cond[발행연도::GTE]', String(Math.floor(Number(fromYear))));
+	}
+	if (Number.isFinite(Number(toYear))) {
+		params.set('cond[발행연도::LTE]', String(Math.floor(Number(toYear))));
 	}
 
 	return `${KCI_CONFIG.baseUrl}${KCI_CONFIG.datasetPath}?serviceKey=${buildServiceKeyPart(serviceKey, serviceKeyMode)}&${params.toString()}`;
@@ -1496,7 +1680,7 @@ function buildCrossrefUrl(options) {
 }
 
 function buildOpenAlexUrl(options) {
-	const { translatedTopic, fromYear, untilYear, globalTypes, perPage, apiKey, mailto } = options;
+	const { translatedTopic, fromYear, untilYear, globalTypes, perPage, apiKey, mailto, page = 1 } = options;
 	const url = new URL(OPENALEX_CONFIG.baseUrl);
 	url.searchParams.set('search', translatedTopic);
 	if (apiKey) {
@@ -1504,6 +1688,7 @@ function buildOpenAlexUrl(options) {
 	}
 	url.searchParams.set('mailto', mailto || CROSSREF_MAILTO);
 	url.searchParams.set('per-page', String(perPage));
+	url.searchParams.set('page', String(Math.max(1, Number(page) || 1)));
 	url.searchParams.set('sort', 'cited_by_count:desc');
 	url.searchParams.set('select', OPENALEX_CONFIG.select);
 	const typeFilter = buildOpenAlexTypeFilter(globalTypes);

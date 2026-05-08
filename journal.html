@@ -2128,6 +2128,10 @@
       color: #d14343;
     }
 
+    .trend-growth.neutral {
+      color: #5f6b7f;
+    }
+
     .trend-pub-count {
       margin-top: 8px;
       font-size: 15px;
@@ -3289,8 +3293,11 @@
               <span class="field-label">최대 수집 건수</span>
               <select id="pageSize">
                 <option value="60">60건</option>
-                <option value="100" selected>100건</option>
+                <option value="120">120건</option>
                 <option value="160">160건</option>
+                <option value="240" selected>240건</option>
+                <option value="320">320건</option>
+                <option value="400">400건</option>
               </select>
             </label>
 
@@ -3316,8 +3323,8 @@
 
       <section id="trendingSection" class="trending-section" aria-live="polite">
         <div class="trending-header">
-          <h2 class="trending-title">최근 주목받는 연구 주제</h2>
-          <span id="trendingBasis" class="trending-basis">지난 30일 기준</span>
+          <h2 class="trending-title">최근 주목받는 연구 키워드</h2>
+          <span id="trendingBasis" class="trending-basis">최근 30일 API 집계 기준</span>
         </div>
         <div id="trendingGrid" class="trending-grid">
           <div class="trend-skeleton"></div>
@@ -4132,11 +4139,11 @@
       const isLocalHost = /^(localhost|127\.0\.0\.1)$/i.test(window.location.hostname || '');
       const isSecureContext = window.location.protocol === 'https:';
 
-      if (apiBaseOverride) {
-        endpoints.push(`${apiBaseOverride}/api/trending-topics`);
-      }
       if (isGitHubPagesHost()) {
         endpoints.push('https://journal-49pm.onrender.com/api/trending-topics');
+      }
+      if (apiBaseOverride) {
+        endpoints.push(`${apiBaseOverride}/api/trending-topics`);
       }
       if (!isGitHubPagesHost()) {
         endpoints.push(APP_CONFIG.trendingEndpoint);
@@ -4231,14 +4238,14 @@
       trendingGrid.innerHTML = '';
 
       if (trendingBasis) {
-        const basis = (meta && meta.basis) ? String(meta.basis) : '지난 30일 기준';
+        const basis = (meta && meta.basis) ? String(meta.basis) : '최근 30일 API 집계 기준';
         trendingBasis.textContent = basis;
       }
 
       if (!Array.isArray(items) || !items.length) {
         const noData = document.createElement('p');
         noData.className = 'trend-no-data';
-        noData.textContent = '현재 트렌드 데이터를 불러올 수 없습니다.';
+        noData.textContent = '상승률(+5% 이상)과 최근 30일 출판 건수를 충족한 키워드가 현재 없습니다.';
         trendingGrid.appendChild(noData);
         return;
       }
@@ -4248,7 +4255,7 @@
         card.className = 'trend-card';
 
         const growth = Number(item.growth_rate || 0);
-        const growthClass = growth >= 0 ? 'positive' : 'negative';
+        const growthClass = growth > 0 ? 'positive' : (growth < 0 ? 'negative' : 'neutral');
         const recentCount = Number(item.recent_count || 0);
 
         card.innerHTML = `
@@ -4256,7 +4263,7 @@
             <span class="trend-topic">${escapeHtml(String(item.topic || '-'))}</span>
             <span class="trend-growth ${growthClass}">${escapeHtml(formatTrendGrowth(growth))}</span>
           </div>
-          <p class="trend-pub-count">최근 ${recentCount.toLocaleString()}편 출판</p>
+          <p class="trend-pub-count">최근 30일 API 집계 ${recentCount.toLocaleString()}편</p>
         `;
         trendingGrid.appendChild(card);
       });
@@ -4267,6 +4274,8 @@
       let lastError = null;
 
       for (const endpoint of endpoints) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 12000);
         try {
           const url = forceRefresh
             ? `${endpoint}${endpoint.includes('?') ? '&' : '?'}refresh=true`
@@ -4274,7 +4283,9 @@
 
           const res = await fetch(url, {
             method: 'GET',
-            headers: { Accept: 'application/json' }
+            headers: { Accept: 'application/json' },
+            cache: 'no-store',
+            signal: controller.signal
           });
           const body = await res.json().catch(() => ({}));
           if (!res.ok || !body.ok) {
@@ -4289,12 +4300,20 @@
             meta: (body.meta && typeof body.meta === 'object') ? body.meta : {}
           };
         } catch (error) {
-          lastError = error;
+          if (error && error.name === 'AbortError') {
+            const timeoutError = new Error('트렌드 API 응답이 지연되고 있습니다.');
+            timeoutError.retryable = true;
+            lastError = timeoutError;
+          } else {
+            lastError = error;
+          }
           const hasNext = endpoint !== endpoints[endpoints.length - 1];
-          if (hasNext && (error.retryable || error.name === 'TypeError')) {
+          if (hasNext && ((lastError && lastError.retryable) || error.name === 'TypeError')) {
             continue;
           }
-          throw error;
+          throw lastError;
+        } finally {
+          clearTimeout(timeoutId);
         }
       }
 
@@ -4323,6 +4342,8 @@
         ? payload.meta
         : ((resultsNode.meta && typeof resultsNode.meta === 'object') ? resultsNode.meta : {});
 
+      assertSearchNotFailed(meta, records);
+
       const analysisCandidate = (payload.analysis && typeof payload.analysis === 'object')
         ? payload.analysis
         : ((payload.report && typeof payload.report === 'object') ? payload.report : resultsNode);
@@ -4335,6 +4356,56 @@
         meta,
         analysis
       };
+    }
+
+    function isExpectedSourceSkipReason(reason) {
+      const text = String(reason || '').toLowerCase();
+      if (!text) return false;
+      return (
+        text.includes('disabled by user')
+        || text.includes('api key not configured')
+        || text.includes('no kci service key')
+        || text.includes('no nanet api key')
+        || text.includes('no global type selected')
+        || text.includes('no crossref-compatible type selected')
+        || text.includes('no query variants available')
+      );
+    }
+
+    function detectSourceFailures(meta) {
+      const diagnostics = (meta && typeof meta.diagnostics === 'object') ? meta.diagnostics : {};
+      const upstream = (meta && typeof meta.upstream === 'object') ? meta.upstream : {};
+      const skipReasons = (diagnostics.sourceSkipReasons && typeof diagnostics.sourceSkipReasons === 'object')
+        ? diagnostics.sourceSkipReasons
+        : {};
+      const sourceNames = ['kci', 'nanet', 'openalex', 'crossref', 'preprint'];
+
+      return sourceNames.filter((name) => {
+        const sourceMeta = (upstream[name] && typeof upstream[name] === 'object') ? upstream[name] : {};
+        const reason = String(sourceMeta.reason || skipReasons[name] || '').trim();
+        const reasonText = reason.toLowerCase();
+        const reasons = Array.isArray(sourceMeta.reasons) ? sourceMeta.reasons : [];
+        const queries = Array.isArray(sourceMeta.queries) ? sourceMeta.queries : [];
+        const totalFetched = Number(sourceMeta.totalFetched || 0);
+
+        if (totalFetched > 0) return false;
+        if (sourceMeta.skipped && reason && !isExpectedSourceSkipReason(reason)) return true;
+        if (reasons.length && (!queries.length || reasons.length >= queries.length)) return true;
+
+        return /request failed|timeout|timed out|network|요청 실패|응답|forbidden|unauthorized|quota|429|500|502|503|504|service unavailable/.test(reasonText);
+      });
+    }
+
+    function assertSearchNotFailed(meta, records) {
+      if (Array.isArray(records) && records.length > 0) return;
+      const failedSources = detectSourceFailures(meta);
+      const warnings = Array.isArray(meta && meta.warnings) ? meta.warnings : [];
+      const hasOutageWarning = warnings.some((item) => /응답이\s*0건|api 키|할당량|ip 접근 제한|요청 실패|연결 실패/i.test(String(item || '')));
+      if (!failedSources.length && !hasOutageWarning) return;
+
+      const sourceText = failedSources.length ? failedSources.join(', ') : '국내/해외 DB';
+
+      throw new Error(`논문 DB 연결 실패로 분석을 중단했습니다. 실패 소스: ${sourceText}. 잠시 후 다시 시도해주세요.`);
     }
 
     function firstArray(candidates) {

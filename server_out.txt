@@ -132,3 +132,113 @@ Global paper analysis server running at http://localhost:3000
 [2026-05-08T15:20:39.672Z] GET /api/trending-topics
 [2026-05-08T15:24:47.255Z] GET /api/trending-topics
 [2026-05-08T15:24:47.585Z] GET /api/trending-topics
+[2026-05-08T15:35:13.693Z] POST /api/analyze
+[analyze] Reading JSON body...
+[analyze] Body received: [
+  'topic',
+  'rangeYears',
+  'pageSize',
+  'recentWeight',
+  'includeKci',
+  'includeCrossref',
+  'includePreprint',
+  'paperTypes',
+  'globalTypes',
+  'field',
+  'sortOrder'
+]
+[analyze] Topic: 생성형 AI가 자기효능감에 미치는 영향
+[analyze] PaperTypes: [ '학술지', '석사', '박사' ]
+[analyze] GlobalTypes: [ 'journal', 'preprint' ]
+[analyze] Starting analysis...
+[analyze] Final paperTypes: [ '학술지', '석사', '박사' ]
+[analyze] Final globalTypes: [ 'journal', 'preprint' ]
+[sources] KCI: 0, NANET: 0, OpenAlex: 11, Crossref: 2, arXiv: 0
+[domain-filter] 13/13개 논문이 도메인 필터 통과
+[analyze] Result data count: 13
+[analyze] Result matchCount: 13
+[analyze] Result similarPapers count: 13
+[analyze] Analysis complete, sending response...
+[2026-05-08T15:37:07.237Z] POST /api/analyze
+[analyze] Reading JSON body...
+[analyze] Body received: [
+  'topic',
+  'rangeYears',
+  'pageSize',
+  'recentWeight',
+  'includeKci',
+  'includeCrossref',
+  'includePreprint',
+  'paperTypes',
+  'globalTypes',
+  'field',
+  'sortOrder'
+]
+[analyze] Topic: 생성형 AI가 자기효능감에 미치는 영향
+[analyze] PaperTypes: [ '학술지', '석사', '박사' ]
+[analyze] GlobalTypes: [ 'journal', 'preprint' ]
+[analyze] Starting analysis...
+[analyze] Final paperTypes: [ '학술지', '석사', '박사' ]
+[analyze] Final globalTypes: [ 'journal', 'preprint' ]
+[sources] KCI: 0, NANET: 0, OpenAlex: 20, Crossref: 2, arXiv: 0
+[domain-filter] 22/22개 논문이 도메인 필터 통과
+[analyze] Result data count: 22
+[analyze] Result matchCount: 22
+[analyze] Result similarPapers count: 22
+[analyze] Analysis complete, sending response...
+[2026-05-08T15:42:14.744Z] GET /api/trending-topics
+[2026-05-08T15:42:14.767Z] POST /api/analyze
+[analyze] Reading JSON body...
+[analyze] Body received: [
+  'topic',
+  'rangeYears',
+  'pageSize',
+  'recentWeight',
+  'includeKci',
+  'includeCrossref',
+  'includePreprint',
+  'paperTypes',
+  'globalTypes',
+  'field',
+  'sortOrder'
+]
+[analyze] Topic: 생성형 AI가 자기효능감에 미치는 영향
+[analyze] PaperTypes: [ '학술지', '석사', '박사' ]
+[analyze] GlobalTypes: [ 'journal', 'preprint' ]
+[analyze] Starting analysis...
+[analyze] Final paperTypes: [ '학술지', '석사', '박사' ]
+[analyze] Final globalTypes: [ 'journal', 'preprint' ]
+[sources] KCI: 0, NANET: 0, OpenAlex: 20, Crossref: 2, arXiv: 0
+[domain-filter] 22/22개 논문이 도메인 필터 통과
+[analyze] Result data count: 22
+[analyze] Result matchCount: 22
+[analyze] Result similarPapers count: 22
+[analyze] Analysis complete, sending response...
+[2026-05-08T15:43:28.563Z] GET /api/trending-topics
+[2026-05-08T15:43:28.600Z] POST /api/analyze
+[analyze] Reading JSON body...
+[analyze] Body received: [
+  'topic',
+  'rangeYears',
+  'pageSize',
+  'recentWeight',
+  'includeKci',
+  'includeCrossref',
+  'includePreprint',
+  'paperTypes',
+  'globalTypes',
+  'field',
+  'sortOrder'
+]
+[analyze] Topic: 생성형 AI가 자기효능감에 미치는 영향
+[analyze] PaperTypes: [ '학술지', '석사', '박사' ]
+[analyze] GlobalTypes: [ 'journal', 'preprint' ]
+[analyze] Starting analysis...
+[analyze] Final paperTypes: [ '학술지', '석사', '박사' ]
+[analyze] Final globalTypes: [ 'journal', 'preprint' ]
+[sources] KCI: 0, NANET: 0, OpenAlex: 20, Crossref: 2, arXiv: 0
+[domain-filter] 22/22개 논문이 도메인 필터 통과
+[analyze] Result data count: 22
+[analyze] Result matchCount: 22
+[analyze] Result similarPapers count: 22
+[analyze] Analysis complete, sending response...
