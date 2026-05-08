@@ -1,3 +1,4 @@
+require('dotenv').config();
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -993,7 +994,7 @@ async function fetchJsonWithRetries(url, options) {
 			const response = await fetch(url, {
 				method: 'GET',
 				headers,
-				signal: AbortSignal.timeout(8000) // 20초 → 8초
+				signal: AbortSignal.timeout(60000) // Render Cold Start 고려: 60초
 			});
 
 			if (response.status === 429) {
