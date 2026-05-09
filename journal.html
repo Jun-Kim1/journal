@@ -2608,7 +2608,7 @@
 
     .kpi.is-novelty {
       grid-row: 1 / span 2;
-      min-height: 430px;
+      min-height: 320px;
       align-content: center;
       justify-items: center;
       text-align: center;
@@ -2654,29 +2654,41 @@
 
     .result-grid {
       margin-top: 16px !important;
-      grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+      display: grid !important;
+      grid-template-columns: repeat(12, minmax(0, 1fr)) !important;
       gap: 16px !important;
     }
 
     .analysis-main {
-      display: flex !important;
-      grid-column: 1 / 3 !important;
-      grid-row: 1 !important;
+      grid-column: 1 / span 8 !important;
+      grid-row: 1 / span 2 !important;
       background: #f0f3f7 !important;
       border-color: #dce3ec !important;
       box-shadow: none !important;
       border-radius: 16px !important;
     }
 
-    .paper-panel,
-    .panel-main-wide,
     .trend-panel {
-      display: none !important;
+      grid-column: 1 / span 4 !important;
+      grid-row: 3 !important;
+      background: #f0f3f7 !important;
+      border-color: #dce3ec !important;
+      box-shadow: none !important;
+      border-radius: 16px !important;
     }
 
     .keyword-panel {
-      grid-column: 3 / 5 !important;
-      grid-row: 1 !important;
+      grid-column: 5 / span 8 !important;
+      grid-row: 3 !important;
+      background: #f0f3f7 !important;
+      border-color: #dce3ec !important;
+      box-shadow: none !important;
+      border-radius: 16px !important;
+    }
+
+    .paper-panel {
+      grid-column: 9 / span 4 !important;
+      grid-row: 1 / span 2 !important;
       background: #f0f3f7 !important;
       border-color: #dce3ec !important;
       box-shadow: none !important;
@@ -3412,8 +3424,6 @@
                 <div id="noveltyLabel" class="kpi-status" data-tone="loading">분석 중</div>
               </div>
             </div>
-            <div id="noveltyReason" class="sub"><span class="skeleton-text">분석 결과를 불러오는 중입니다...</span></div>
-            <div id="sparkNovelty" class="kpi-spark"></div>
           </article>
           <article class="kpi is-domestic">
             <h4>유사 논문 수</h4>
@@ -4959,7 +4969,6 @@
       const noveltyLabel = document.getElementById('noveltyLabel');
       noveltyLabel.textContent = verdict.label;
       noveltyLabel.dataset.tone = verdict.tone;
-      document.getElementById('noveltyReason').textContent = verdict.summary;
       document.getElementById('similarPaperCount').textContent = String(matchCount);
       const similarityThresholdHint = document.getElementById('similarityThresholdHint');
       if (similarityThresholdHint) {
