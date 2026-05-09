@@ -2655,40 +2655,13 @@
     .result-grid {
       margin-top: 16px !important;
       display: grid !important;
-      grid-template-columns: repeat(12, minmax(0, 1fr)) !important;
+      grid-template-columns: 1fr !important;
       gap: 16px !important;
     }
 
     .analysis-main {
-      grid-column: 1 / span 8 !important;
-      grid-row: 1 / span 2 !important;
-      background: #f0f3f7 !important;
-      border-color: #dce3ec !important;
-      box-shadow: none !important;
-      border-radius: 16px !important;
-    }
-
-    .trend-panel {
-      grid-column: 1 / span 4 !important;
-      grid-row: 3 !important;
-      background: #f0f3f7 !important;
-      border-color: #dce3ec !important;
-      box-shadow: none !important;
-      border-radius: 16px !important;
-    }
-
-    .keyword-panel {
-      grid-column: 5 / span 8 !important;
-      grid-row: 3 !important;
-      background: #f0f3f7 !important;
-      border-color: #dce3ec !important;
-      box-shadow: none !important;
-      border-radius: 16px !important;
-    }
-
-    .paper-panel {
-      grid-column: 9 / span 4 !important;
-      grid-row: 1 / span 2 !important;
+      grid-column: 1 / -1 !important;
+      grid-row: auto !important;
       background: #f0f3f7 !important;
       border-color: #dce3ec !important;
       box-shadow: none !important;
@@ -3347,8 +3320,8 @@
 
       <section id="trendingSection" class="trending-section" aria-live="polite">
         <div class="trending-header">
-          <h2 class="trending-title">최근 주목받는 연구 키워드</h2>
-          <span id="trendingBasis" class="trending-basis">최근 30일 API 집계 기준</span>
+          <h2 class="trending-title">트렌드 지표</h2>
+          <span id="trendingBasis" class="trending-basis">최근 30일 트렌드 지표</span>
         </div>
         <div id="trendingGrid" class="trending-grid">
           <div class="trend-skeleton"></div>
@@ -3413,7 +3386,7 @@
           </div>
         </div>
 
-        <div id="warningBox" class="hidden warning-box"></div>
+        <div id="warningBox" class="hidden" style="display:none !important"></div>
 
         <div class="result-kpis">
           <article class="kpi is-novelty">
@@ -3452,12 +3425,7 @@
           <section class="panel analysis-main">
             <h3 class="panel-title">글로벌 분석 리포트</h3>
             <p id="insightBox" class="muted insight-box"></p>
-            <div id="scoreBreakdown" class="score-breakdown"></div>
-            <div class="spec-grid">
-              <div id="subScorePanel" class="spec-card"></div>
-              <div id="gapAnalysisPanel" class="spec-card"></div>
-            </div>
-            <div id="rationaleList" class="rationale-list"></div>
+            <div id="scoreBreakdown" style="display:none"></div>
 
             <div class="mini-kpi-grid">
               <div class="kpi mini-kpi">
@@ -3469,67 +3437,6 @@
                 <div id="matchCount" class="num mini-kpi-value">0</div>
               </div>
             </div>
-          </section>
-
-          <section class="panel trend-panel">
-            <div class="metric-label metric-head">연도별 발표 추이</div>
-            <div id="trendChart" class="trend-area-wrap"></div>
-            <div id="trendLineChart" class="trend-line-chart"></div>
-          </section>
-
-          <section class="panel keyword-panel">
-            <div class="metric-label metric-head">핵심 키워드</div>
-            <div id="keywordCloud" class="word-cloud-zone"></div>
-
-            <div class="translated-topic">
-              국문-영문 매핑 쿼리: <span id="translatedTopic">-</span>
-            </div>
-          </section>
-
-          <section class="panel paper-panel">
-            <div class="paper-stack-head">
-              <h3 class="panel-title panel-title-tight">유사 논문 리스트</h3>
-              <div id="paperListMeta" class="paper-stack-meta">유사도 기반 전체 논문</div>
-            </div>
-            <div id="facetSummary" class="result-facets"></div>
-            <div id="paperList"></div>
-            <div class="paper-footnote">국내외 학술 데이터 기준으로 결과를 제공합니다.</div>
-          </section>
-
-          <section class="panel panel-main-wide">
-            <h3 class="panel-title">투고 참고 저널</h3>
-            <div id="recommendedKciList" class="journal-card-grid"></div>
-          </section>
-
-          <section class="panel recommendation-panel" id="strengthPanel">
-            <h3 class="panel-title">💡 강점</h3>
-            <ul id="strengthList" class="rec-list">
-              <li class="rec-item"><span class="rec-item-icon">✦</span><span class="rec-item-body">분석 결과 로딩 중...</span></li>
-            </ul>
-          </section>
-
-          <section class="panel recommendation-panel" id="directionPanel">
-            <h3 class="panel-title">🧭 차별화 방향</h3>
-            <ul id="directionList" class="rec-list">
-              <li class="rec-item"><span class="rec-item-icon">→</span><span class="rec-item-body">분석 결과 로딩 중...</span></li>
-            </ul>
-          </section>
-        </div>
-
-        <!-- 하단 분석 섹션 (라이트 테마) -->
-        <div class="bottom-analysis-wrap">
-          <section class="bottom-panel">
-            <h3 class="bottom-panel-title">연도별 출판 추이</h3>
-            <div id="bottomTrendChart" class="bottom-trend-area"></div>
-          </section>
-          <section class="bottom-panel">
-            <h3 class="bottom-panel-title">가장 유사한 논문</h3>
-            <div id="bottomSimilarList" class="bottom-similar-list"></div>
-          </section>
-          <section class="bottom-panel">
-            <h3 class="bottom-panel-title">분석 대상 저널 분포</h3>
-            <p style="font-size:12px;color:#718096;margin:0 0 14px;">유사 논문이 실린 저널을 카드 형태로 확인할 수 있습니다.</p>
-            <div id="bottomJournalList" class="bottom-similar-list"></div>
           </section>
         </div>
 
@@ -4254,7 +4161,7 @@
       trendingGrid.innerHTML = '';
 
       if (trendingBasis) {
-        const basis = (meta && meta.basis) ? String(meta.basis) : '최근 30일 API 집계 기준';
+        const basis = (meta && meta.basis) ? String(meta.basis) : '최근 30일 트렌드 지표';
         trendingBasis.textContent = basis;
       }
 
@@ -4279,7 +4186,7 @@
             <span class="trend-topic">${escapeHtml(String(item.topic || '-'))}</span>
             <span class="trend-growth ${growthClass}">${escapeHtml(formatTrendGrowth(growth))}</span>
           </div>
-          <p class="trend-pub-count">최근 30일 API 집계 ${recentCount.toLocaleString()}편</p>
+          <p class="trend-pub-count">트렌드 지표 ${recentCount.toLocaleString()}건</p>
         `;
         trendingGrid.appendChild(card);
       });
@@ -4899,7 +4806,7 @@
         `최근 5년 집중도 ${formatPercent(recentShare)}로 ${recentShare < 0.35 ? '희소 분야 성격이 강합니다.' : recentShare < 0.6 ? '최근 연구 증가가 완만합니다.' : '최근 연구 집중도가 높습니다.'}`,
         `희소성 지표 ${Math.round(scarcityScore * 100)}점은 핵심 키워드 반복 빈도를 반영합니다.`,
         `고유사도 문헌 비중은 ${formatPercent(highSimilarityShare)}입니다.`,
-        `국내 ${domesticCount}건, 해외 ${globalCount}건 문헌을 종합 반영했습니다.`
+        `해외 ${globalCount}건 문헌을 종합 반영했습니다.`
       ];
     }
 
@@ -4917,7 +4824,7 @@
         `상위 유사도 평균은 ${formatPercent(topAvg)}입니다.`,
         `고유사도 문헌 비중은 ${formatPercent(highSimilarityShare)}입니다.`,
         `최근 3년 집중도는 ${formatPercent(recentShare)}입니다.`,
-        `국내 ${domesticCount}건, 해외 ${globalCount}건 기준으로 분석했습니다.`,
+        `해외 ${globalCount}건 기준으로 분석했습니다.`,
         `해외 매핑 검색어는 "${translatedTopic}" 입니다.`,
         keywords.length ? `반복 키워드는 ${keywords.join(', ')}입니다.` : '',
         peak && peak.count > 0 ? `${peak.year}년에 발표량이 가장 높았습니다.` : ''
@@ -5004,7 +4911,6 @@
 
       renderRecommendationLists(analysis);
 
-      renderScoreBreakdown(analysis.scoreBreakdown || {});
       renderSubScorePanel(analysis.subScores || {});
       renderGapAnalysisPanel(analysis.gapAnalysis || {}, analysis.reportNarrative || {}, safeSimilarPapers);
       renderRationaleList(analysis.rationale || []);

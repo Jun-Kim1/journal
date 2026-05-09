@@ -164,7 +164,7 @@ const server = http.createServer(async (req, res) => {
 			const topN = clampNumber(Number(requestUrl.searchParams.get('topN') || 4), 4, 1, 8);
 			const forceRefresh = String(requestUrl.searchParams.get('refresh') || '').toLowerCase() === 'true';
 			const trendResult = await getTrendingTopics({ topN, forceRefresh });
-			const basisText = '최근 30일';
+			const basisText = '최근 30일 트렌드 지표';
 			sendJson(res, 200, {
 				ok: true,
 				data: trendResult.data,
@@ -383,20 +383,9 @@ async function analyzeTopicSources(payload) {
 	const kciKeyConfigured = Boolean(String(serviceKey || '').trim());
 	const nanetKeyConfigured = Boolean(String(nanetApiKey || '').trim());
 
-	if (!kciKeyConfigured || /No KCI service key/i.test(kciSkipReason)) {
-		warnings.push('KCI_API_KEY가 설정되지 않아 KCI 국내 논문 검색이 비활성화되었습니다. Render 환경변수에 KCI_API_KEY를 등록하세요.');
-	}
-	if (!nanetKeyConfigured || /NANET API key not configured|No NANET API key/i.test(nanetSkipReason)) {
-		warnings.push('NANET_API_KEY가 설정되지 않아 국회도서관 논문 검색이 비활성화되었습니다. Render 환경변수에 NANET_API_KEY를 등록하세요.');
-	}
-
 	// Semantic Scholar & OpenAlex-KO가 한국 논문을 보완
 	const domesticFromSS = (semanticScholarResult.data || []).filter((p) => p.language === 'ko');
 	const domesticFromOAKo = openAlexKoResult.data || [];
-	const allDomesticKCI = [...(kciResult.data || []), ...(nanetResult.data || []), ...domesticFromSS, ...domesticFromOAKo];
-	if (allDomesticKCI.length === 0) {
-		warnings.push('국내 논문 검색 결과가 없습니다. 해외 논문 데이터를 기반으로 분석을 계속합니다.');
-	}
 
 	console.log(`[sources] KCI: ${kciResult.data ? kciResult.data.length : 0}, NANET: ${nanetResult.data ? nanetResult.data.length : 0}, SemanticScholar-KO: ${domesticFromSS.length}, OpenAlexKO: ${domesticFromOAKo.length}, OpenAlex: ${openAlexResult.data ? openAlexResult.data.length : 0}, Crossref: ${crossrefResult.data ? crossrefResult.data.length : 0}, arXiv: ${arxivResult.data ? arxivResult.data.length : 0}`);
 	if (warnings.length > 0) {
