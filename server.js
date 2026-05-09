@@ -812,6 +812,30 @@ async function fetchNanetTrendCount(keyword, fromDate, toDate) {
 		return 0;
 	}
 
+	// Prefer LOSI trend API first because public NANET search endpoints
+	// frequently return 404 depending on environment/key scope.
+	try {
+		const trend = await getNanetArticleTrend({ searchTerm: keyword });
+		const rows = Array.isArray(trend?.data) ? trend.data : [];
+		if (rows.length) {
+			const fromYear = Number(String(fromDate || '').slice(0, 4));
+			const toYear = Number(String(toDate || '').slice(0, 4));
+			const total = rows
+				.filter((item) => {
+					const y = Number(item?.year || 0);
+					if (!Number.isFinite(y) || y <= 0) return false;
+					if (Number.isFinite(fromYear) && y < fromYear) return false;
+					if (Number.isFinite(toYear) && y > toYear) return false;
+					return true;
+				})
+				.reduce((sum, item) => sum + (Number(item?.count) || 0), 0);
+			console.log(`[NANET trend] LOSI fallback 사용: keyword="${keyword}" total=${total}`);
+			return parseIntegerCount(total);
+		}
+	} catch (losiError) {
+		console.error(`[NANET trend] LOSI fallback 실패: name=${losiError?.name} message=${losiError?.message}`);
+	}
+
 	const candidates = buildNanetRequestCandidates({
 		topic: keyword,
 		pageSize: 1,
@@ -1314,6 +1338,22 @@ async function searchNanetPapers(options) {
 	}
 
 	if (bestEmptyMeta) {
+		// LOSI fallback: when public search endpoints are unavailable, try
+		// a best-effort article search endpoint from the same NANET detail API.
+		try {
+			const losiFallback = await searchNanetPapersViaLosi({
+				topic,
+				pageSize,
+				fromYear,
+				untilYear
+			});
+			if (losiFallback.data.length) {
+				return losiFallback;
+			}
+		} catch (losiError) {
+			console.error(`[NANET] LOSI fallback 실패: name=${losiError?.name} message=${losiError?.message}`);
+		}
+
 		return { data: [], meta: bestEmptyMeta };
 	}
 
@@ -3255,4 +3295,64 @@ function decodeXmlEntities(value) {
 		.replace(/&amp;/g, '&')
 		.replace(/&quot;/g, '"')
 		.replace(/&#39;/g, "'");
+}
+
+async function searchNanetPapersViaLosi(options) {
+	const { topic, pageSize, fromYear, untilYear } = options;
+	const endpointCandidates = ['/articleSearch', '/searchArticle', '/articleList'];
+	let lastError = null;
+
+	for (const endpoint of endpointCandidates) {
+		try {
+			const response = await nanetApiRequest(endpoint, {
+				searchTerm: topic,
+				query: topic,
+				pageNum: 1,
+				pageSize: Math.min(pageSize, NANET_CONFIG.perPageCap),
+				resultType: 'json'
+			});
+			const docs = pickNanetList(response, [
+				'result.articleList',
+				'articleList',
+				'result.documents',
+				'documents',
+				'result.items',
+				'items',
+				'result.list',
+				'list'
+			]);
+			const records = docs
+				.map((doc) => normalizeNanetRecord(doc, fromYear, untilYear))
+				.filter(Boolean)
+				.slice(0, pageSize);
+
+			console.log(`[NANET] LOSI fallback 성공: endpoint=${endpoint} 결과=${records.length}건`);
+			return {
+				data: records,
+				meta: {
+					totalFetched: records.length,
+					requestUrl: `${NANET_DETAIL_CONFIG.baseUrl}${endpoint}`,
+					totalCount: records.length,
+					candidate: `losi:${endpoint}`
+				}
+			};
+		} catch (error) {
+			lastError = error;
+			console.error(`[NANET] LOSI endpoint 실패: ${endpoint} name=${error?.name} message=${error?.message}`);
+		}
+	}
+
+	if (lastError) {
+		throw lastError;
+	}
+
+	return {
+		data: [],
+		meta: {
+			totalFetched: 0,
+			requestUrl: `${NANET_DETAIL_CONFIG.baseUrl}/articleSearch`,
+			totalCount: 0,
+			candidate: 'losi:none'
+		}
+	};
 }
