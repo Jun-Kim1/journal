@@ -84,14 +84,14 @@ const NANET_DETAIL_CONFIG = {
 };
 
 const TREND_KEYWORDS = [
-	'Large Language Models',
-	'Quantum Computing',
-	'Climate Change Modeling',
-	'CRISPR Gene Editing',
-	'Multimodal AI',
-	'Transformer Architecture',
-	'Federated Learning',
-	'Diffusion Models'
+	{ topic: '생성형 AI', globalQuery: 'Large Language Models', domesticQuery: '생성형 인공지능' },
+	{ topic: '양자 컴퓨팅', globalQuery: 'Quantum Computing', domesticQuery: '양자 컴퓨팅' },
+	{ topic: '기후변화 모델링', globalQuery: 'Climate Change Modeling', domesticQuery: '기후변화 모델링' },
+	{ topic: '유전자 편집', globalQuery: 'CRISPR Gene Editing', domesticQuery: '유전자 편집' },
+	{ topic: '멀티모달 AI', globalQuery: 'Multimodal AI', domesticQuery: '멀티모달 인공지능' },
+	{ topic: '트랜스포머 아키텍처', globalQuery: 'Transformer Architecture', domesticQuery: '트랜스포머' },
+	{ topic: '연합학습', globalQuery: 'Federated Learning', domesticQuery: '연합학습' },
+	{ topic: '확산모델', globalQuery: 'Diffusion Models', domesticQuery: '확산 모델' }
 ];
 const TREND_CACHE_TTL_MS = 30 * 60 * 1000;
 const TREND_MIN_GROWTH_RATE = 5;
@@ -361,9 +361,9 @@ async function analyzeTopicSources(payload) {
 		warnings.push('NANET_API_KEY가 설정되지 않아 국회도서관 논문 검색이 비활성화되었습니다. Render 환경변수에 NANET_API_KEY를 등록하세요.');
 	}
 	if ((kciResult?.data?.length || 0) === 0 && (nanetResult?.data?.length || 0) === 0 && kciKeyConfigured && nanetKeyConfigured) {
-		warnings.push('국내 DB 응답이 0건입니다. API 키 권한/할당량, 호출 파라미터, 서버 IP 접근 제한 여부를 점검하세요.');
+		warnings.push('국내 DB (KCI/NANET) 검색 결과가 없습니다. 해외 논문 데이터를 기반으로 분석을 계속합니다.');
 	}
-	
+
 	console.log(`[sources] KCI: ${kciResult.data ? kciResult.data.length : 0}, NANET: ${nanetResult.data ? nanetResult.data.length : 0}, OpenAlex: ${openAlexResult.data ? openAlexResult.data.length : 0}, Crossref: ${crossrefResult.data ? crossrefResult.data.length : 0}, arXiv: ${arxivResult.data ? arxivResult.data.length : 0}`);
 	if (warnings.length > 0) {
 		console.log('[sources] Warnings:', warnings);
@@ -444,7 +444,8 @@ async function analyzeTopicSources(payload) {
 	const domainMustKeywords = buildDomainMustKeywords(queryPack);
 	let domainFiltered = filterByDomainRelevance(merged, domainMustKeywords);
 
-	if (domainFiltered.length < Math.min(8, Math.max(4, Math.round(pageSize * 0.04)))) {
+	const minDesiredResults = Math.min(40, Math.max(16, Math.round(pageSize * 0.2)));
+	if (domainFiltered.length < minDesiredResults) {
 		const relevanceRanked = rankByQueryAffinity(merged, queryPack, domainMustKeywords);
 		domainFiltered = relevanceRanked.slice(0, pageSize);
 		if (merged.length > 0 && domainFiltered.length > 0) {
@@ -473,6 +474,7 @@ async function analyzeTopicSources(payload) {
 		field,
 		pageSize,
 		recentWeight: clampNumber(payload.recentWeight, 1, 0.5, 1.5),
+		similarityThreshold: clampNumber(payload.similarityThreshold, 0.65, 0.5, 0.9),
 		includeKci,
 		includeCrossref,
 		includePreprint,
@@ -636,7 +638,10 @@ function buildScenarioQueryVariants(queryPack) {
 		'student self-efficacy generative ai education'
 	];
 
-	return dedupeStringArray(scenarios.map((scenario) => `${baseQuery} ${scenario}`.trim())).slice(0, 4);
+	// Use scenarios as standalone queries (not prepended with full base query).
+	// Prepending the long base query makes isRelevantCrossrefRecord threshold too high,
+	// filtering out valid student/programmer self-efficacy papers.
+	return dedupeStringArray(scenarios).slice(0, 4);
 }
 
 function rankByQueryAffinity(papers, queryPack, mustKeywordsByCategory) {
@@ -693,7 +698,12 @@ function rankByQueryAffinity(papers, queryPack, mustKeywordsByCategory) {
 	scored.sort((a, b) => b.score - a.score);
 	const strongMatches = scored.filter((item) => item.score >= 1.0).map((item) => item.paper);
 	if (strongMatches.length) {
-		return strongMatches;
+		const minKeep = Math.min(40, papers.length);
+		if (strongMatches.length >= minKeep) {
+			return strongMatches;
+		}
+		const rankedAll = scored.map((item) => item.paper);
+		return dedupeNormalizedRecords([...strongMatches, ...rankedAll]).slice(0, minKeep);
 	}
 
 	return scored.map((item) => item.paper);
@@ -802,12 +812,36 @@ async function fetchNanetTrendCount(keyword, fromDate, toDate) {
 	return parseIntegerCount(json?.totalCount || json?.result?.totalCount || 0);
 }
 
-async function fetchTrendCountsForWindow(keyword, fromDate, toDate) {
+function normalizeTrendKeywordConfig(input) {
+	if (typeof input === 'string') {
+		return {
+			topic: input,
+			globalQuery: input,
+			domesticQuery: input
+		};
+	}
+
+	const topic = String(input?.topic || input?.globalQuery || input?.domesticQuery || '').trim();
+	const globalQuery = String(input?.globalQuery || topic).trim();
+	const domesticQuery = String(input?.domesticQuery || topic).trim();
+
+	return {
+		topic,
+		globalQuery: globalQuery || topic,
+		domesticQuery: domesticQuery || topic
+	};
+}
+
+async function fetchTrendCountsForWindow(keywordConfig, fromDate, toDate) {
+	const config = normalizeTrendKeywordConfig(keywordConfig);
+	const globalKeyword = config.globalQuery;
+	const domesticKeyword = config.domesticQuery;
+
 	const settled = await Promise.allSettled([
-		fetchCrossrefTrendCount(keyword, fromDate, toDate),
-		fetchArxivTrendCount(keyword, fromDate, toDate),
-		fetchKciTrendCount(keyword, fromDate, toDate),
-		fetchNanetTrendCount(keyword, fromDate, toDate)
+		fetchCrossrefTrendCount(globalKeyword, fromDate, toDate),
+		fetchArxivTrendCount(globalKeyword, fromDate, toDate),
+		fetchKciTrendCount(domesticKeyword, fromDate, toDate),
+		fetchNanetTrendCount(domesticKeyword, fromDate, toDate)
 	]);
 
 	const names = ['crossref', 'arxiv', 'kci', 'nanet'];
@@ -830,13 +864,14 @@ async function fetchTrendCountsForWindow(keyword, fromDate, toDate) {
 	return { total, bySource, errors, successSourceCount };
 }
 
-async function fetchCountsForTrendKeyword(keyword, ranges) {
-	const recent = await fetchTrendCountsForWindow(keyword, ranges.recentStartYmd, ranges.recentEndYmd);
-	const previous = await fetchTrendCountsForWindow(keyword, ranges.prevStartYmd, ranges.prevEndYmd);
+async function fetchCountsForTrendKeyword(keywordConfig, ranges) {
+	const config = normalizeTrendKeywordConfig(keywordConfig);
+	const recent = await fetchTrendCountsForWindow(config, ranges.recentStartYmd, ranges.recentEndYmd);
+	const previous = await fetchTrendCountsForWindow(config, ranges.prevStartYmd, ranges.prevEndYmd);
 	const growthRate = computeGrowthRate(recent.total, previous.total);
 
 	return {
-		topic: keyword,
+		topic: config.topic,
 		recent_count: recent.total,
 		previous_count: previous.total,
 		growth_rate: growthRate,
@@ -877,7 +912,7 @@ async function getTrendingTopics(options) {
 
 	const ranges = getTrendDateRanges();
 	const settled = await Promise.allSettled(
-		TREND_KEYWORDS.map((keyword) => fetchCountsForTrendKeyword(keyword, ranges))
+		TREND_KEYWORDS.map((keywordConfig) => fetchCountsForTrendKeyword(keywordConfig, ranges))
 	);
 
 	const fulfilled = settled
@@ -1499,13 +1534,12 @@ function buildGlobalQueryText(topic, translatedTopic) {
 	if (/자기효능감/.test(original) || /self-efficacy/i.test(translated)) {
 		candidate.push([
 			'self-efficacy',
-			'self-confidence',
+			'academic self-efficacy',
 			'programmer self-efficacy',
-			'developer confidence',
+			'student self-efficacy',
 			'artist self-efficacy',
 			'creative self-efficacy',
-			'software engineer motivation',
-			'not teachers not students'
+			'developer self-efficacy'
 		].join(' '));
 	}
 
@@ -1671,7 +1705,10 @@ function buildDomainMustKeywords(queryPack) {
 		},
 		psychology: {
 			detect: ['self-efficacy', 'self efficacy', 'efficacy', 'confidence', 'psychological'],
-			must: ['self-efficacy', 'self efficacy', 'efficacy', 'confidence', 'psychological', 'belief', 'motivation']
+			// Use only compound/specific terms to avoid false positives:
+			// - standalone 'efficacy' matches medical papers (drug/vaccine efficacy)
+			// - standalone 'confidence' matches ML papers (confidence intervals/scores)
+			must: ['self-efficacy', 'self efficacy', 'psychological', '자기효능감']
 		}
 	};
 
@@ -1717,10 +1754,9 @@ function filterByDomainRelevance(papers, mustKeywordsByCategory) {
 	const relaxed = papers
 		.map((paper) => ({ paper, boost: computePaperDomainBoostScore(paper, mustKeywordsByCategory) }))
 		.sort((a, b) => b.boost - a.boost)
-		.filter((item) => item.boost >= 0.04)
-		.slice(0, Math.min(20, papers.length))
-		.map((item) => item.paper);
-
+			.filter((item) => item.boost >= 0.15)
+			.slice(0, Math.min(20, papers.length))
+			.map((item) => item.paper);
 	if (relaxed.length) {
 		console.log(`[domain-filter] strict 결과 부족 (${scored.length}/${papers.length}), relaxed ${relaxed.length}건 반환`);
 		return relaxed;
@@ -1810,27 +1846,30 @@ function computePaperDomainBoostScore(paper, mustKeywordsByCategory) {
 
 function buildKciDatasetUrl(options) {
 	const { topic, paperType, field, perPage, serviceKey, serviceKeyMode, fromYear, toYear } = options;
-	const params = new URLSearchParams();
-	params.set('returnType', 'json');
-	params.set('page', '1');
-	params.set('perPage', String(perPage));
-	params.set('cond[논문명::LIKE]', topic);
+	// URLSearchParams encodes bracket-style param names (cond[...]) which KCI API may not recognize.
+	// Build query string manually so bracket notation stays raw while values are encoded.
+	const parts = [
+		'returnType=json',
+		'page=1',
+		`perPage=${Number(perPage) || 10}`,
+		`cond[논문명::LIKE]=${encodeURIComponent(topic)}`
+	];
 
 	const mappedType = PAPER_TYPE_MAP[paperType];
 	if (mappedType) {
-		params.set('cond[학위구분::EQ]', mappedType);
+		parts.push(`cond[학위구분::EQ]=${encodeURIComponent(mappedType)}`);
 	}
 	if (field && field !== 'all') {
-		params.set('cond[학문분야::LIKE]', field);
+		parts.push(`cond[학문분야::LIKE]=${encodeURIComponent(field)}`);
 	}
 	if (Number.isFinite(Number(fromYear))) {
-		params.set('cond[발행연도::GTE]', String(Math.floor(Number(fromYear))));
+		parts.push(`cond[발행연도::GTE]=${Math.floor(Number(fromYear))}`);
 	}
 	if (Number.isFinite(Number(toYear))) {
-		params.set('cond[발행연도::LTE]', String(Math.floor(Number(toYear))));
+		parts.push(`cond[발행연도::LTE]=${Math.floor(Number(toYear))}`);
 	}
 
-	return `${KCI_CONFIG.baseUrl}${KCI_CONFIG.datasetPath}?serviceKey=${buildServiceKeyPart(serviceKey, serviceKeyMode)}&${params.toString()}`;
+	return `${KCI_CONFIG.baseUrl}${KCI_CONFIG.datasetPath}?serviceKey=${buildServiceKeyPart(serviceKey, serviceKeyMode)}&${parts.join('&')}`;
 }
 
 function buildCrossrefUrl(options) {
@@ -1901,7 +1940,16 @@ async function fetchJsonWithRetries(url, options) {
 				throw createError(response.status, `${errorContext} 요청 실패: ${message || response.statusText}`);
 			}
 
-			return response.json();
+			// Detect HTML error pages (e.g. NANET IP-restriction returns HTTP 200 with HTML body)
+			const responseText = await response.text();
+			if (responseText.trimStart().startsWith('<')) {
+				throw createError(503, `${errorContext} 서버가 HTML 페이지를 반환했습니다 (IP 접근 제한 또는 서버 오류)`);
+			}
+			try {
+				return JSON.parse(responseText);
+			} catch (_parseErr) {
+				throw createError(502, `${errorContext} 응답을 JSON으로 파싱할 수 없습니다`);
+			}
 		} catch (error) {
 			lastError = error;
 			if (!shouldRetry(error) || attempt === 1) {
@@ -2877,8 +2925,9 @@ function isRelevantCrossrefRecord(record, queryTokens) {
 	]);
 	const domainTokensInQuery = queryTokens.filter((t) => DOMAIN_SPECIFIC_TOKENS.has(t));
 	if (domainTokensInQuery.length >= 2) {
-		// 도메인 쿼리: 전체 매칭 30% 이상 AND 도메인 키워드 최소 1개 포함
-		const minOverall = Math.max(2, Math.floor(queryTokens.length * 0.3));
+		// 도메인 쿼리: 전체 매칭 20% 이상 AND 도메인 키워드 최소 1개 포함
+		// (30% → 20%: 자기효능감 관련 논문은 query token 중 일부만 포함하므로 완화)
+		const minOverall = Math.max(2, Math.floor(queryTokens.length * 0.2));
 		const hasDomainMatch = domainTokensInQuery.some((t) => haystackTokens.has(t));
 		return overlap >= minOverall && hasDomainMatch;
 	}

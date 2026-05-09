@@ -4,7 +4,7 @@ const {
 	NOVELTY_LABELS
 } = require('./constants');
 
-const SIMILARITY_THRESHOLD = 0.4;
+const SIMILARITY_THRESHOLD = 0.65;
 const PRIORITY_KEYWORDS = [
 	'self-efficacy', 'self efficacy', 'self-confidence',
 	'programmer', 'developer', 'software engineer',
@@ -50,8 +50,11 @@ function buildAnalysisReport(cfg, records, meta) {
 
 	const scored = normalizeSimilarityScores(rawScored);
 
-	const relevanceThreshold = SIMILARITY_THRESHOLD;
-	const relevant = scored.filter((record) => {
+	const requestedThreshold = Number(cfg && cfg.similarityThreshold);
+	const relevanceThreshold = Number.isFinite(requestedThreshold)
+		? clampRange(requestedThreshold, 0.5, 0.9)
+		: SIMILARITY_THRESHOLD;
+	let relevant = scored.filter((record) => {
 		const similarityPass = Number(record.similarity || 0) >= relevanceThreshold;
 		const loosePass = includesLooseMatchForAnalysis(scoringTopic, record);
 		if (!domainSignals.hasAny) {
@@ -60,6 +63,14 @@ function buildAnalysisReport(cfg, records, meta) {
 		const domainPass = hasRequiredDomainEvidence(record, domainSignals);
 		return (similarityPass || loosePass) && domainPass;
 	});
+
+	// If relevance filters are too strict, keep a broader affinity-ranked pool
+	// to avoid returning only 0-2 papers for broad Korean queries.
+	if (relevant.length < Math.min(20, Math.max(8, Math.round(scored.length * 0.2)))) {
+		relevant = [...scored]
+			.sort((a, b) => Number(b.similarity || 0) - Number(a.similarity || 0))
+			.slice(0, Math.min(80, scored.length));
+	}
 	const sorted = sortRecordsForAnalysis(relevant, cfg.sortOrder);
 	const topPapers = sorted.slice(0, 20);
 	const similarities = topPapers.map((item) => Number(item.similarity || 0)).sort((a, b) => b - a);
@@ -143,7 +154,13 @@ function buildAnalysisReport(cfg, records, meta) {
 	const recommendedJournals = buildRecommendedJournals(relevant);
 	const recommendedKciJournals = recommendedJournals; // backwards compat
 	const expectedCitationIndex = Math.round((averageNumbers(topPapers.map((paper) => Number(paper.citationCount || 0))) * 0.72) + (noveltyScore * 0.38));
-	const rankedSimilarPapers = rankSimilarPapersForAnalysis(relevant, now, relevant.length, relevanceThreshold);
+	const rankedSimilarPapers = rankSimilarPapersForAnalysis(
+		relevant,
+		now,
+		Math.max(10, relevant.length),
+		relevanceThreshold,
+		{ minReturn: 10, minAllowedThreshold: 0.5 }
+	);
 	const searchWarning = confidence < 0.5 ? `검색 신뢰도가 낮습니다 (${Math.round(confidence * 100)}%). 쿼리 확장 또는 범위 확대를 권장합니다.` : null;
 
 	const scoreBreakdown = {
@@ -416,17 +433,29 @@ function buildDomainSignals(queryPack, originalTopic, scoringTopic) {
 	].join(' ').toLowerCase();
 
 	const agentKeywords = ['programmer', 'developer', 'software engineer', 'coder', 'software development', 'programming'];
-	const psychologyKeywords = ['self-efficacy', 'self efficacy', 'efficacy', 'confidence', 'psychological', 'motivation', 'belief'];
+	const aiKeywords = [
+		'generative ai', 'artificial intelligence', 'chatgpt', 'llm', 'large language model',
+		'foundation model', 'language model', '생성형', '인공지능', '대규모 언어모델'
+	];
+	// Removed standalone 'efficacy' and 'confidence' — these match medical/ML contexts too broadly.
+	const psychologyKeywords = [
+		'self-efficacy', 'self efficacy', 'academic self-efficacy', 'learning self-efficacy',
+		'psychological', 'motivation', 'belief', '자기효능감', '학습 효능감'
+	];
 
 	const hasAgent = agentKeywords.some((kw) => context.includes(kw));
+	const hasAi = aiKeywords.some((kw) => context.includes(kw));
 	const hasPsychology = psychologyKeywords.some((kw) => context.includes(kw));
+	const activeCount = [hasAgent, hasAi, hasPsychology].filter(Boolean).length;
 
 	return {
-		hasAny: hasAgent || hasPsychology,
-		requireAllActiveCategories: hasAgent && hasPsychology,
+		hasAny: hasAgent || hasAi || hasPsychology,
+		requireAllActiveCategories: activeCount >= 2,
 		agentKeywords,
+		aiKeywords,
 		psychologyKeywords,
 		hasAgent,
+		hasAi,
 		hasPsychology
 	};
 }
@@ -439,31 +468,36 @@ function computeDomainBoostForRecord(record, domainSignals) {
 	const agentMatchCount = domainSignals.hasAgent
 		? domainSignals.agentKeywords.filter((kw) => text.includes(kw)).length
 		: 0;
+	const aiMatchCount = domainSignals.hasAi
+		? domainSignals.aiKeywords.filter((kw) => text.includes(kw)).length
+		: 0;
 	const psychologyMatchCount = domainSignals.hasPsychology
 		? domainSignals.psychologyKeywords.filter((kw) => text.includes(kw)).length
 		: 0;
 
-	const totalRequired = (domainSignals.hasAgent ? 1 : 0) + (domainSignals.hasPsychology ? 1 : 0);
+	const totalRequired = (domainSignals.hasAgent ? 1 : 0) + (domainSignals.hasAi ? 1 : 0) + (domainSignals.hasPsychology ? 1 : 0);
 	if (totalRequired === 0) {
 		return 0;
 	}
-	const covered = (agentMatchCount > 0 ? 1 : 0) + (psychologyMatchCount > 0 ? 1 : 0);
+	const covered = (agentMatchCount > 0 ? 1 : 0) + (aiMatchCount > 0 ? 1 : 0) + (psychologyMatchCount > 0 ? 1 : 0);
 	return clampRange(covered / totalRequired, 0, 1);
 }
 
 function normalizeSimilarityScores(records) {
 	const values = records.map((record) => Number(record.rawSimilarity || 0)).filter((v) => Number.isFinite(v));
 	const max = values.length ? Math.max(...values) : 0;
-	const min = values.length ? Math.min(...values) : 0;
 
 	if (!values.length || max <= 0) {
 		return records.map((record) => ({ ...record, similarity: 0 }));
 	}
 
+	// Scale proportionally against max (no min-max stretching).
+	// Min-max stretch made irrelevant papers appear highly similar by boosting
+	// the lowest-scoring paper to 0% and the highest to 100% regardless of
+	// absolute relevance. Instead, use raw/max so weak matches show as low %.
 	return records.map((record) => {
 		const raw = Number(record.rawSimilarity || 0);
-		const stretched = max > min ? (raw - min) / (max - min) : raw / max;
-		const normalized = clampRange(stretched, 0, 1);
+		const normalized = clampRange(raw / max, 0, 1);
 		return {
 			...record,
 			similarity: Number(normalized.toFixed(4))
@@ -506,14 +540,26 @@ function hasRequiredDomainEvidence(record, domainSignals) {
 	const hasAgentMatch = domainSignals.hasAgent
 		? domainSignals.agentKeywords.some((kw) => text.includes(kw))
 		: true;
+	const hasAiMatch = domainSignals.hasAi
+		? domainSignals.aiKeywords.some((kw) => text.includes(kw))
+		: true;
 	const hasPsychologyMatch = domainSignals.hasPsychology
 		? domainSignals.psychologyKeywords.some((kw) => text.includes(kw))
 		: true;
 
 	if (domainSignals.requireAllActiveCategories) {
-		return hasAgentMatch && hasPsychologyMatch;
+		return hasAgentMatch && hasAiMatch && hasPsychologyMatch;
 	}
-	return hasAgentMatch && hasPsychologyMatch;
+	if (domainSignals.hasAgent && !domainSignals.hasAi && !domainSignals.hasPsychology) {
+		return hasAgentMatch;
+	}
+	if (!domainSignals.hasAgent && domainSignals.hasAi && !domainSignals.hasPsychology) {
+		return hasAiMatch;
+	}
+	if (!domainSignals.hasAgent && !domainSignals.hasAi && domainSignals.hasPsychology) {
+		return hasPsychologyMatch;
+	}
+	return hasAgentMatch || hasAiMatch || hasPsychologyMatch;
 }
 
 function sortRecordsForAnalysis(records, sortOrder) {
@@ -616,10 +662,13 @@ function computePmiKeywordRarity(keywords, papers) {
 	return Math.round(clampRange((1 - meanNpmi) / 2, 0, 1) * 10000) / 10000;
 }
 
-function rankSimilarPapersForAnalysis(papers, currentYear, topK, threshold = SIMILARITY_THRESHOLD) {
+function rankSimilarPapersForAnalysis(papers, currentYear, topK, threshold = SIMILARITY_THRESHOLD, options = {}) {
 	const maxCitations = Math.max(1, ...papers.map((paper) => Number(paper.citationCount || 0)));
-	return [...papers]
-		.filter((paper) => Number(paper.similarity || 0) >= threshold)
+	const minReturn = Math.max(1, Math.floor(Number(options.minReturn) || 10));
+	const minAllowedThreshold = clampRange(Number(options.minAllowedThreshold || 0.5), 0, 1);
+	const strictThreshold = clampRange(Number(threshold || SIMILARITY_THRESHOLD), minAllowedThreshold, 1);
+
+	const ranked = [...papers]
 		.map((paper) => {
 			const age = currentYear - Number(paper.year || currentYear);
 			const recency = Math.max(0, 1 - (age / 20));
@@ -638,8 +687,15 @@ function rankSimilarPapersForAnalysis(papers, currentYear, topK, threshold = SIM
 				rankScore: Math.round(rankScore * 10000) / 10000
 			};
 		})
-		.sort((a, b) => (b.priorityScore - a.priorityScore) || (b.rankScore - a.rankScore))
-		.slice(0, topK);
+		.sort((a, b) => (b.priorityScore - a.priorityScore) || (b.rankScore - a.rankScore));
+
+	let filtered = ranked.filter((paper) => Number(paper.similarity || 0) >= strictThreshold);
+	if (filtered.length < minReturn) {
+		const relaxedThreshold = Math.max(minAllowedThreshold, strictThreshold - 0.15);
+		filtered = ranked.filter((paper) => Number(paper.similarity || 0) >= relaxedThreshold);
+	}
+
+	return filtered.slice(0, topK);
 }
 
 function classifyNovelty(score) {

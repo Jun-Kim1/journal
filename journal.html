@@ -3303,6 +3303,17 @@
             </label>
 
             <label class="field">
+              <span class="field-label">유사도 임계값</span>
+              <select id="similarityThreshold">
+                <option value="0.50">0.50 (넓게)</option>
+                <option value="0.60">0.60</option>
+                <option value="0.65" selected>0.65 (기본)</option>
+                <option value="0.70">0.70</option>
+                <option value="0.80">0.80 (엄격)</option>
+              </select>
+            </label>
+
+            <label class="field">
               <span class="field-label">최근성 가중치<span class="hint" title="값이 높을수록 최신 발표 논문의 영향력을 더 크게 반영합니다.">i</span></span>
               <select id="recentWeight">
                 <option value="0.8">보수적</option>
@@ -3407,7 +3418,7 @@
           <article class="kpi is-domestic">
             <h4>유사 논문 수</h4>
             <div id="similarPaperCount" class="num">0</div>
-            <div class="sub">전체 유사 문헌 기준</div>
+            <div id="similarityThresholdHint" class="sub">전체 유사 문헌 기준 (threshold 0.65)</div>
             <button id="viewSimilarPapersBtn" class="view-papers-btn">목록 보기 →</button>
             <div id="sparkPapers" class="kpi-spark"></div>
           </article>
@@ -4089,6 +4100,7 @@
         field: document.getElementById('fieldSelect').value,
         pageSize: Number(document.getElementById('pageSize').value),
         recentWeight: Number(document.getElementById('recentWeight').value),
+        similarityThreshold: Number(document.getElementById('similarityThreshold')?.value || 0.65),
         includeKci: true,
         includeCrossref: true,
         includePreprint: true,
@@ -4638,9 +4650,13 @@
         return { ...record, similarity };
       });
 
-      const relevant = scored.filter((record) => record.similarity >= 0.10 || includesLooseMatch(cfg.topic, record));
+      const effectiveThreshold = clamp(Number(cfg.similarityThreshold || 0.65), 0.5, 0.9);
+      let relevant = scored.filter((record) => record.similarity >= effectiveThreshold || includesLooseMatch(cfg.topic, record));
+      if (relevant.length < 10) {
+        relevant = scored.filter((record) => record.similarity >= 0.5 || includesLooseMatch(cfg.topic, record));
+      }
       const sorted = sortRecords(relevant, cfg.sortOrder);
-      const topPapers = sorted.slice(0, 12);
+      const topPapers = sorted.slice(0, 20);
       const topAvg = average(topPapers.map((item) => item.similarity));
       const highSimilarityShare = relevant.length
         ? relevant.filter((item) => item.similarity >= 0.45).length / relevant.length
@@ -4945,6 +4961,11 @@
       noveltyLabel.dataset.tone = verdict.tone;
       document.getElementById('noveltyReason').textContent = verdict.summary;
       document.getElementById('similarPaperCount').textContent = String(matchCount);
+      const similarityThresholdHint = document.getElementById('similarityThresholdHint');
+      if (similarityThresholdHint) {
+        const activeThreshold = Number(latestPayload?.similarityThreshold || 0.65);
+        similarityThresholdHint.textContent = `전체 유사 문헌 기준 (threshold ${activeThreshold.toFixed(2)})`;
+      }
       const trendRate = Number(analysis.trendGrowthRate || 0);
       const trendEl = document.getElementById('researchFocusKpi');
       if (trendEl) trendEl.textContent = trendRate >= 0 ? `+${trendRate}%` : `${trendRate}%`;
