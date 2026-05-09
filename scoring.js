@@ -770,20 +770,43 @@ function buildAnalysisInsight(options) {
 		scarcityScore
 	} = options;
 	const peak = [...yearDist].sort((a, b) => b.count - a.count)[0];
-	const keywords = keywordFreq.slice(0, 5).map((item) => item.keyword);
+	const topKw = keywordFreq.slice(0, 5).map((item) => item.keyword);
 	const verdict = classifyNovelty(noveltyScore);
 
-	return [
-		verdict.summary,
-		`상위 유사도 평균은 ${Math.round(topAvg * 100)}%입니다.`,
-		`고유사도 문헌 비중은 ${Math.round(highSimilarityShare * 100)}%입니다.`,
-		`최근 5년 집중도는 ${Math.round(recentShare * 100)}%입니다.`,
-		`희소성 지표는 ${Math.round(scarcityScore * 100)}점입니다.`,
-		`국내 ${domesticCount}건, 해외 ${globalCount}건 기준으로 분석했습니다.`,
-		`해외 매핑 검색어는 "${translatedTopic}" 입니다.`,
-		keywords.length ? `반복 키워드는 ${keywords.join(', ')}입니다.` : '',
-		peak && peak.count > 0 ? `${peak.year}년에 발표량이 가장 높았습니다.` : ''
-	].filter(Boolean).join(' ');
+	// 참신성 평가
+	const noveltyDesc = verdict.summary;
+
+	// 유사도 수준
+	const simDesc = topAvg >= 0.65
+		? `상위 유사도 평균은 ${Math.round(topAvg * 100)}%로 높은 편입니다.`
+		: topAvg >= 0.4
+			? `상위 유사도 평균은 ${Math.round(topAvg * 100)}%입니다.`
+			: `상위 유사도 평균은 ${Math.round(topAvg * 100)}%로 낮아 희소한 주제입니다.`;
+
+	// 창신성 지수
+	const scoreDesc = `창신성 지수는 ${noveltyScore}점입니다.`;
+
+	// 검색 규모
+	const countDesc = (domesticCount + globalCount) > 0
+		? `총 ${domesticCount + globalCount}건 기준으로 분석했습니다.`
+		: '';
+
+	// 영문 검색어: 너무 길면 앞 6개 단어만 표시
+	const enTokens = String(translatedTopic || '').split(/\s+/).filter(Boolean);
+	const enShort = enTokens.slice(0, 6).join(' ');
+	const enDesc = enShort
+		? `영문 검색어는 "${enShort}${enTokens.length > 6 ? '…' : ''}"으로 매핑되었습니다.`
+		: '';
+
+	// 유사 논문 주요 키워드
+	const kwDesc = topKw.length
+		? `유사 논문에서 자주 등장한 키워드는 ${topKw.join(', ')}입니다.`
+		: '';
+
+	// 발표 피크
+	const peakDesc = peak && peak.count > 0 ? `${peak.year}년에 발표량이 가장 높았습니다.` : '';
+
+	return [noveltyDesc, simDesc, scoreDesc, countDesc, enDesc, kwDesc, peakDesc].filter(Boolean).join(' ');
 }
 
 function buildGapAnalysisReport(options) {

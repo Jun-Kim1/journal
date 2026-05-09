@@ -3608,7 +3608,7 @@
     ];
 
     const LOADING_STAGE_DURATION_MS = 12000;
-    const LOADING_MIN_TOTAL_MS = 60000;
+    const LOADING_MIN_TOTAL_MS = 8000;
 
     const stopWords = new Set([
       '연구', '분석', '고찰', '효과', '영향', '중심', '기반', '활용', '개발', '탐색', '비교', '검증', '대한',
@@ -4085,7 +4085,6 @@
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 90000);
       const endpoints = buildAnalyzeEndpoints();
-      console.log('[API Debug] endpoints to try:', endpoints);
 
       try {
         let lastError = null;
@@ -4098,7 +4097,6 @@
               signal: controller.signal
             });
             const body = await res.json().catch(() => ({}));
-            console.log('[API Debug] response:', { endpoint, status: res.status, ok: res.ok });
             if (!res.ok || !body.ok) {
               const isRetryableStatus = res.status === 404 || res.status === 405 || (res.status >= 500 && res.status <= 599);
               if (res.status === 404 || res.status === 405) {
@@ -4806,29 +4804,45 @@
         `최근 5년 집중도 ${formatPercent(recentShare)}로 ${recentShare < 0.35 ? '희소 분야 성격이 강합니다.' : recentShare < 0.6 ? '최근 연구 증가가 완만합니다.' : '최근 연구 집중도가 높습니다.'}`,
         `희소성 지표 ${Math.round(scarcityScore * 100)}점은 핵심 키워드 반복 빈도를 반영합니다.`,
         `고유사도 문헌 비중은 ${formatPercent(highSimilarityShare)}입니다.`,
-        `해외 ${globalCount}건 문헌을 종합 반영했습니다.`
+        `총 ${globalCount}건 문헌을 종합 반영했습니다.`
       ];
     }
 
     function buildInsight(noveltyScore, recentShare, topAvg, domesticCount, globalCount, translatedTopic, keywordFreq, yearDist, highSimilarityShare) {
       const peak = [...yearDist].sort((a, b) => b.count - a.count)[0];
-      const novelty = noveltyScore >= 78
-        ? '국내외 중복도가 높지 않아 참신성이 높은 편입니다.'
-        : noveltyScore >= 55
-          ? '유사 연구가 존재하지만 차별화 여지가 충분합니다.'
-          : '유사 선행연구가 많아 차별화 설계가 중요합니다.';
 
-      const keywords = keywordFreq.slice(0, 5).map((item) => item.keyword);
-      return [
-        novelty,
-        `상위 유사도 평균은 ${formatPercent(topAvg)}입니다.`,
-        `고유사도 문헌 비중은 ${formatPercent(highSimilarityShare)}입니다.`,
-        `최근 3년 집중도는 ${formatPercent(recentShare)}입니다.`,
-        `해외 ${globalCount}건 기준으로 분석했습니다.`,
-        `해외 매핑 검색어는 "${translatedTopic}" 입니다.`,
-        keywords.length ? `반복 키워드는 ${keywords.join(', ')}입니다.` : '',
-        peak && peak.count > 0 ? `${peak.year}년에 발표량이 가장 높았습니다.` : ''
-      ].filter(Boolean).join(' ');
+      // 참신성 평가 문장
+      const noveltyDesc = noveltyScore >= 78
+        ? '선행연구와의 중복도가 낮아 차별화된 연구 공간이 있습니다.'
+        : noveltyScore >= 55
+          ? '유사 선행연구가 존재하나 차별화 여지가 충분합니다.'
+          : '유사 선행연구가 다수 구간에 위치하며, 차별화 설계가 필수입니다.';
+
+      // 유사도 수준 평가
+      const simDesc = topAvg >= 0.65
+        ? `상위 유사도 평균은 ${formatPercent(topAvg)}로 높은 편입니다.`
+        : topAvg >= 0.4
+          ? `상위 유사도 평균은 ${formatPercent(topAvg)}입니다.`
+          : `상위 유사도 평균은 ${formatPercent(topAvg)}로 낮아 희소한 주제입니다.`;
+
+      // 창신성 지수 설명
+      const noveltyScoreDesc = `창신성 지수는 ${noveltyScore}점입니다.`;
+
+      // 검색 규모
+      const countDesc = globalCount > 0 ? `총 ${globalCount}건 기준으로 분석했습니다.` : '';
+
+      // 영문 변환어: 첫 번째 공백 전 단어 5개 정도만 추출해서 깔끔하게 보여줌
+      const primaryEn = String(translatedTopic || '').split(/\s+/).slice(0, 6).join(' ');
+      const enDesc = primaryEn ? `주제의 영문 검색어는 "${primaryEn}…"으로 매핑되었습니다.` : '';
+
+      // 유사 논문의 주요 키워드
+      const topKw = keywordFreq.slice(0, 5).map((item) => item.keyword);
+      const kwDesc = topKw.length ? `유사 논문에서 자주 등장한 키워드는 ${topKw.join(', ')}입니다.` : '';
+
+      // 발표 피크
+      const peakDesc = peak && peak.count > 0 ? `${peak.year}년에 발표량이 가장 높았습니다.` : '';
+
+      return [noveltyDesc, simDesc, noveltyScoreDesc, countDesc, enDesc, kwDesc, peakDesc].filter(Boolean).join(' ');
     }
 
     function renderWarnings(meta) {
@@ -4854,29 +4868,19 @@
       const noveltyPercent = Math.round(analysis.noveltyScore || 0);
       const matchCount = typeof analysis.matchCount === 'number' ? analysis.matchCount : parseInt(analysis.matchCount, 10) || 0;
 
-      // ── 디버깅: 핵심 필드 매핑 확인 ─────────────────
-      console.log('[Novelty Debug] 수신 데이터:', {
-        noveltyScore: analysis.noveltyScore,
-        noveltyPercent,
-        matchCount,
-        rawMatchCount: analysis.matchCount,
-        backendVerdict: analysis.verdict,
-        gapAnalysisKeys: Object.keys(analysis.gapAnalysis || {}),
-        keySignalsCount: (analysis.gapAnalysis?.keySignals || []).length,
-        opportunitySignalsCount: (analysis.gapAnalysis?.opportunitySignals || []).length,
-      });
-
       const ring = document.getElementById('noveltyRing');
       const ringText = document.getElementById('noveltyRingText');
       if (ring) ring.style.setProperty('--pct', String(clamp(noveltyPercent, 0, 100)));
       if (ringText) ringText.textContent = `${noveltyPercent}%`;
       // matchCount를 우선 고려한 verdict 계산 (백엔드 verdict는 matchCount를 모를 수 있으므로 재계산)
       const verdict = getNoveltyVerdict(noveltyPercent, matchCount);
-      console.log('[Novelty Debug] 최종 verdict:', verdict);
       const noveltyLabel = document.getElementById('noveltyLabel');
-      noveltyLabel.textContent = verdict.label;
-      noveltyLabel.dataset.tone = verdict.tone;
-      document.getElementById('similarPaperCount').textContent = String(matchCount);
+      if (noveltyLabel) {
+        noveltyLabel.textContent = verdict.label;
+        noveltyLabel.dataset.tone = verdict.tone;
+      }
+      const similarPaperCountEl = document.getElementById('similarPaperCount');
+      if (similarPaperCountEl) similarPaperCountEl.textContent = String(matchCount);
       const similarityThresholdHint = document.getElementById('similarityThresholdHint');
       if (similarityThresholdHint) {
         const activeThreshold = Number(latestPayload?.similarityThreshold || 0.65);
@@ -4892,14 +4896,20 @@
         trendCountSubEl.textContent = `최근3년 ${recent3Count}건 / 이전3년 ${prior3Count}건`;
       }
       const journalCount = Array.isArray(analysis.recommendedJournals) ? analysis.recommendedJournals.length : 0;
-      document.getElementById('expectedCitationKpi').textContent = journalCount ? `${journalCount}종` : '-';
-      document.getElementById('translatedTopic').textContent = analysis.translatedTopic || '-';
+      const expectedCitationKpiEl = document.getElementById('expectedCitationKpi');
+      if (expectedCitationKpiEl) expectedCitationKpiEl.textContent = journalCount ? `${journalCount}종` : '-';
+      const translatedTopicEl = document.getElementById('translatedTopic');
+      if (translatedTopicEl) translatedTopicEl.textContent = analysis.translatedTopic || '-';
       const reportScopeEl = document.getElementById('reportScope');
       if (reportScopeEl) reportScopeEl.textContent = analysis.reportScope;
-      document.getElementById('insightBox').textContent = analysis.insight;
-      document.getElementById('recentShare').textContent = formatPercent(analysis.recentShare);
-      document.getElementById('matchCount').textContent = String(analysis.matchCount);
-      document.getElementById('sourceSummary').textContent = analysis.sourceSummary;
+      const insightBoxEl = document.getElementById('insightBox');
+      if (insightBoxEl) insightBoxEl.textContent = analysis.insight;
+      const recentShareEl = document.getElementById('recentShare');
+      if (recentShareEl) recentShareEl.textContent = formatPercent(analysis.recentShare);
+      const matchCountEl = document.getElementById('matchCount');
+      if (matchCountEl) matchCountEl.textContent = String(analysis.matchCount);
+      const sourceSummaryEl = document.getElementById('sourceSummary');
+      if (sourceSummaryEl) sourceSummaryEl.textContent = analysis.sourceSummary;
 
       const resultTopicEl = document.getElementById('resultTopic');
       if (resultTopicEl) resultTopicEl.textContent = latestPayload?.topic || analysis.translatedTopic || '-';
@@ -5089,6 +5099,7 @@
 
     function renderRationaleList(items) {
       const target = document.getElementById('rationaleList');
+      if (!target) return;
       target.innerHTML = '';
       items.forEach((item) => {
         const row = document.createElement('div');
@@ -5184,6 +5195,7 @@
 
     function renderFacetSummary(papers) {
       const target = document.getElementById('facetSummary');
+      if (!target) return;
       target.innerHTML = '';
       if (!papers.length) {
         return;
@@ -5207,6 +5219,7 @@
 
     function renderTrendChart(yearDist) {
       const chart = document.getElementById('trendChart');
+      if (!chart) return;
       chart.innerHTML = '';
       if (!yearDist.length) {
         chart.innerHTML = '<div class="muted" style="font-size:12px;padding:8px;">연도별 데이터가 충분하지 않습니다.</div>';
@@ -5305,6 +5318,7 @@
 
     function renderKeywordCloud(keywords, topic, similarPapers) {
       const cloud = document.getElementById('keywordCloud');
+      if (!cloud) return;
       cloud.innerHTML = '';
       if (!keywords.length) {
         cloud.innerHTML = '<span class="muted" style="font-size:12px;">표시할 핵심 키워드가 충분하지 않습니다.</span>';
@@ -5359,6 +5373,7 @@
 
     function renderPaperList(papers) {
       const list = document.getElementById('paperList');
+      if (!list) return;
       list.innerHTML = '';
       const listMeta = document.getElementById('paperListMeta');
       if (listMeta) listMeta.textContent = `유사도 기반 전체 논문 ${papers.length}건`;
