@@ -70,7 +70,7 @@ const LLM_EXPANSION_CONFIG = {
 };
 
 const NANET_CONFIG = {
-	baseUrl: 'https://www.nanet.go.kr/search/openApi/search.do',
+	baseUrl: process.env.NANET_BASE_URL || 'https://openapi.nanet.go.kr/search/v1/article',
 	apiKey: process.env.NANET_API_KEY || '',
 	perPageCap: 100
 };
@@ -1083,7 +1083,9 @@ async function searchAcrossQueryVariants(queries, searchFn, maxResults) {
 
 async function searchKciPapers(options) {
 	const { topic, serviceKey, serviceKeyMode, pageSize, paperTypes, field } = options;
+	console.log(`[KCI] serviceKey 존재 여부: ${!!serviceKey} (길이: ${String(serviceKey || '').length})`);
 	if (!serviceKey) {
+		console.error('[KCI] serviceKey 없음 — KCI_API_KEY 환경변수를 확인하세요');
 		return { data: [], meta: { skipped: true, reason: 'No KCI service key' } };
 	}
 
@@ -1933,12 +1935,12 @@ function buildOpenAlexUrl(options) {
 function buildNanetUrl(options) {
 	const { topic, pageSize, apiKey } = options;
 	const url = new URL(NANET_CONFIG.baseUrl);
-	url.searchParams.set('key', apiKey);
-	url.searchParams.set('query', topic);
+	// openapi.nanet.go.kr API v1 파라미터 스펙
+	url.searchParams.set('apiKey', apiKey);
+	url.searchParams.set('searchKey', topic);
 	url.searchParams.set('pageSize', String(Math.min(pageSize, NANET_CONFIG.perPageCap)));
 	url.searchParams.set('pageNum', '1');
 	url.searchParams.set('resultType', 'json');
-	url.searchParams.set('sort', 'RANK');
 	return url.toString();
 }
 
