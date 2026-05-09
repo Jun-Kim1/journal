@@ -217,7 +217,7 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, HOST, () => {
 	console.log(`Global paper analysis server running at http://localhost:${PORT}`);
-	console.log(`[startup] build=2026-05-09-nanet-v2 nanetBaseUrl=${NANET_CONFIG.baseUrl}`);
+	console.log(`[startup] build=2026-05-09-nanet-v3-kci-fallback nanetBaseUrl=${NANET_CONFIG.baseUrl}`);
 	console.log(`[startup] kciKeyConfigured=${Boolean(String(KCI_CONFIG.defaultServiceKey || '').trim())} nanetKeyConfigured=${Boolean(String(NANET_CONFIG.apiKey || '').trim())}`);
 });
 
@@ -1130,7 +1130,8 @@ async function searchKciPapers(options) {
 		return { data: [], meta: { skipped: true, reason: 'No KCI service key' } };
 	}
 
-	const queryVariants = buildKoreanDomesticQueryVariants(topic);
+	const normalizedTopic = normalizeKoreanQueryForDomesticSearch(topic);
+	const queryVariants = buildKoreanDomesticQueryVariants(normalizedTopic);
 	const perType = Math.max(10, Math.ceil(pageSize / Math.max(1, paperTypes.length)));
 	const requests = [];
 
@@ -1167,12 +1168,52 @@ async function searchKciPapers(options) {
 		}
 	}));
 
-	const merged = dedupeNormalizedRecords(responses.flatMap((entry) => entry.items)).slice(0, pageSize);
+	let merged = dedupeNormalizedRecords(responses.flatMap((entry) => entry.items)).slice(0, pageSize);
+
+	if (!merged.length) {
+		const fallbackFields = ['제목', '논문명', '주제어', '키워드'];
+		const fallbackQueries = dedupeStringArray([normalizedTopic, ...queryVariants.slice(0, 3)]).slice(0, 4);
+		const fallbackRequests = [];
+		for (const queryField of fallbackFields) {
+			for (const query of fallbackQueries) {
+				fallbackRequests.push({ queryField, query });
+			}
+		}
+
+		const fallbackResponses = await Promise.all(fallbackRequests.map(async ({ queryField, query }) => {
+			try {
+				const upstreamUrl = buildKciDatasetUrl({
+					topic: query,
+					paperType: '',
+					field,
+					perPage: Math.max(20, perType),
+					serviceKey,
+					serviceKeyMode,
+					queryField
+				});
+				console.log(`[KCI] fallback 요청: field=${queryField} query="${query}" url=${redactSensitiveUrl(upstreamUrl)}`);
+				const json = await fetchJsonWithRetries(upstreamUrl, {
+					headers: { Accept: 'application/json' },
+					errorContext: `KCI fallback ${queryField}`
+				});
+				const items = extractKciRecords(json).map(normalizeKciRecord).filter(Boolean);
+				console.log(`[KCI] fallback 응답: field=${queryField} query="${query}" 결과=${items.length}건`);
+				return items;
+			} catch (error) {
+				console.error(`[KCI] fallback 실패: field=${queryField} query="${query}" name=${error?.name} message=${error?.message}`);
+				return [];
+			}
+		}));
+
+		merged = dedupeNormalizedRecords(fallbackResponses.flat()).slice(0, pageSize);
+	}
+
 	return {
 		data: merged,
 		meta: {
 			totalFetched: merged.length,
 			queryVariants,
+			normalizedTopic,
 			upstreamUrls: responses.map((entry) => redactSensitiveUrl(entry.url))
 		}
 	};
@@ -1889,7 +1930,7 @@ function buildKoreanDomesticQueryVariants(topic) {
 		return [];
 	}
 
-	const normalized = base
+	const normalized = normalizeKoreanQueryForDomesticSearch(base)
 		.replace(/["'`]/g, ' ')
 		.replace(/[()\[\]{}]/g, ' ')
 		.replace(/\s+/g, ' ')
@@ -1916,6 +1957,25 @@ function buildKoreanDomesticQueryVariants(topic) {
 		...englishBoost,
 		...pairs
 	]).slice(0, 8);
+}
+
+function normalizeKoreanQueryForDomesticSearch(text) {
+	let normalized = String(text || '').trim();
+	if (!normalized) return '';
+
+	normalized = normalized
+		.replace(/자기\s+효능감/g, '자기효능감')
+		.replace(/학습\s+효능감/g, '학습효능감')
+		.replace(/생성형\s+ai/gi, '생성형 AI');
+
+	const cleaned = normalized
+		.split(/\s+/)
+		.map((token) => token.replace(/(은|는|이|가|을|를|에|의|와|과|로|으로|도|만)$/u, ''))
+		.filter((token) => token.length >= 2)
+		.join(' ')
+		.trim();
+
+	return cleaned || normalized;
 }
 
 function redactSensitiveUrl(value) {
@@ -1950,14 +2010,15 @@ function computePaperDomainBoostScore(paper, mustKeywordsByCategory) {
 }
 
 function buildKciDatasetUrl(options) {
-	const { topic, paperType, field, perPage, serviceKey, serviceKeyMode, fromYear, toYear } = options;
+	const { topic, paperType, field, perPage, serviceKey, serviceKeyMode, fromYear, toYear, queryField = '논문명' } = options;
 	// URLSearchParams encodes bracket-style param names (cond[...]) which KCI API may not recognize.
 	// Build query string manually so bracket notation stays raw while values are encoded.
+	const safeField = String(queryField || '논문명').replace(/[\[\]]/g, '').trim() || '논문명';
 	const parts = [
 		'returnType=json',
 		'page=1',
 		`perPage=${Number(perPage) || 10}`,
-		`cond[논문명::LIKE]=${encodeURIComponent(topic)}`
+		`cond[${safeField}::LIKE]=${encodeURIComponent(topic)}`
 	];
 
 	const mappedType = PAPER_TYPE_MAP[paperType];
