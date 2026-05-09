@@ -920,11 +920,13 @@ async function getTrendingTopics(options) {
 	if (data.length < topN) {
 		data = [...data, ...pushUnique(popular)];
 	}
-	data = data.slice(0, topN);
 
-	// 4칸 보장: 최종적으로 부족하면 인기 키워드로라도 채움
+	// 4칸 보장: 최종적으로 부족하면 필터를 완화해 TREND_KEYWORDS 전체에서 채움
 	if (data.length < topN) {
-		for (const item of popular) {
+		for (const item of settled
+			.filter((result) => result.status === 'fulfilled')
+			.map((result) => result.value)
+			.sort((a, b) => (Number(b.recent_count || 0) - Number(a.recent_count || 0)) || (Number(b.growth_rate || 0) - Number(a.growth_rate || 0)))) {
 			if (data.length >= topN) break;
 			const key = normalizeTrendKey(item);
 			if (key && !data.some((entry) => normalizeTrendKey(entry) === key)) {
@@ -932,6 +934,7 @@ async function getTrendingTopics(options) {
 			}
 		}
 	}
+	data = data.slice(0, topN);
 	trendingTopicsCache = {
 		expiresAt: now + TREND_CACHE_TTL_MS,
 		updatedAt: now,
@@ -1705,6 +1708,24 @@ function filterByDomainRelevance(papers, mustKeywordsByCategory) {
 		.sort((a, b) => b.boost - a.boost)
 		.map((item) => item.paper);
 
+	if (scored.length >= 4) {
+		console.log(`[domain-filter] ${scored.length}/${papers.length}개 논문이 도메인 필터 통과`);
+		return scored;
+	}
+
+	// strict 필터 결과가 너무 적으면, 일치도가 높은 순으로 보강
+	const relaxed = papers
+		.map((paper) => ({ paper, boost: computePaperDomainBoostScore(paper, mustKeywordsByCategory) }))
+		.sort((a, b) => b.boost - a.boost)
+		.filter((item) => item.boost >= 0.04)
+		.slice(0, Math.min(20, papers.length))
+		.map((item) => item.paper);
+
+	if (relaxed.length) {
+		console.log(`[domain-filter] strict 결과 부족 (${scored.length}/${papers.length}), relaxed ${relaxed.length}건 반환`);
+		return relaxed;
+	}
+
 	if (!scored.length && papers.length) {
 		// 엄격 필터로 0건이 되면 도메인 부스트 상위 논문을 최소한으로 반환
 		const fallback = papers
@@ -1737,6 +1758,9 @@ function buildKoreanDomesticQueryVariants(topic) {
 		.filter((token) => /[가-힣a-zA-Z]/.test(token))
 		.filter((token) => !['영향', '효과', '활용', '연구', '분석', '중심', '미치는', '대한'].includes(token))
 		.slice(0, 6);
+	const englishBoost = /자기효능감|self-efficacy/i.test(normalized)
+		? ['self-efficacy', 'academic self-efficacy', 'developer confidence', 'artist creativity confidence', 'programmer self-efficacy']
+		: [];
 
 	const pairs = [];
 	for (let i = 0; i < keywords.length; i += 1) {
@@ -1748,6 +1772,7 @@ function buildKoreanDomesticQueryVariants(topic) {
 	return dedupeStringArray([
 		normalized,
 		...keywords,
+		...englishBoost,
 		...pairs
 	]).slice(0, 8);
 }

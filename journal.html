@@ -3233,11 +3233,12 @@
 
       <div class="scope-area">
         <div class="scope-card">
-          <div class="scope-title">검색 범위</div>
+          <div class="scope-title">통합 검색</div>
+          <div class="scope-note">국내/해외 전체 소스를 고정 사용합니다.</div>
           <div class="scope-pair">
             <div class="scope-group scope-kci-g">
               <label class="scope-parent-row">
-                <input id="includeKci" type="checkbox" checked />
+                <input id="includeKci" type="checkbox" checked disabled />
                 <span class="scope-parent-check"></span>
                 <span class="scope-parent-name">국내 문헌</span>
               </label>
@@ -3250,13 +3251,13 @@
             <div class="scope-divider"></div>
             <div class="scope-group scope-global-g">
               <label class="scope-parent-row">
-                <input id="includeCrossref" type="checkbox" checked />
+                <input id="includeCrossref" type="checkbox" checked disabled />
                 <span class="scope-parent-check"></span>
                 <span class="scope-parent-name">해외 저널</span>
               </label>
               <div id="globalTypeGroup" class="scope-children">
-                <label class="scope-child"><input type="checkbox" name="globalType" value="journal" checked /><span>학술지</span></label>
-                <label class="scope-child"><input id="includePreprint" type="checkbox" name="globalType" value="preprint" /><span>프리프린트</span></label>
+                <label class="scope-child"><input type="checkbox" name="globalType" value="journal" checked disabled /><span>학술지</span></label>
+                <label class="scope-child"><input id="includePreprint" type="checkbox" name="globalType" value="preprint" checked disabled /><span>프리프린트</span></label>
               </div>
             </div>
           </div>
@@ -3385,7 +3386,7 @@
               <option value="citation">인용순</option>
               <option value="similarity">정확도순</option>
             </select>
-            <div id="sourceSummary" class="source-summary-chip">국내 저널 + 해외 저널</div>
+            <div id="sourceSummary" class="source-summary-chip">통합 검색</div>
           </div>
         </div>
 
@@ -3974,26 +3975,17 @@
     });
 
     includeCrossrefInput.addEventListener('change', () => {
+      includeCrossrefInput.checked = true;
       const globals = form.querySelectorAll('input[name="globalType"]');
-      if (!includeCrossrefInput.checked) {
-        globalTypeGroup.style.opacity = '.35';
-        globals.forEach((el) => { el.checked = false; el.disabled = true; });
-      } else {
-        globalTypeGroup.style.opacity = '1';
-        globals.forEach((el) => { el.disabled = false; el.checked = el.value === 'journal'; });
-        if (includePreprintInput) includePreprintInput.checked = false;
-      }
+      globalTypeGroup.style.opacity = '1';
+      globals.forEach((el) => { el.disabled = true; el.checked = true; });
     });
 
     includeKciInput.addEventListener('change', () => {
+      includeKciInput.checked = true;
       const locals = form.querySelectorAll('input[name="paperType"]');
-      if (!includeKciInput.checked) {
-        kciTypeGroup.style.opacity = '.35';
-        locals.forEach((el) => { el.checked = false; el.disabled = true; });
-      } else {
-        kciTypeGroup.style.opacity = '1';
-        locals.forEach((el) => { el.disabled = false; el.checked = ['학술지', '석사', '박사'].includes(el.value); });
-      }
+      kciTypeGroup.style.opacity = '1';
+      locals.forEach((el) => { el.disabled = true; el.checked = true; });
     });
 
     resultSortOrder.addEventListener('change', () => {
@@ -4017,8 +4009,9 @@
     }, 30 * 60 * 1000);
 
     function initializeScopeOptions() {
-      if (!includeCrossrefInput.checked) includeCrossrefInput.dispatchEvent(new Event('change'));
-      if (!includeKciInput.checked) includeKciInput.dispatchEvent(new Event('change'));
+      if (includeCrossrefInput) includeCrossrefInput.dispatchEvent(new Event('change'));
+      if (includeKciInput) includeKciInput.dispatchEvent(new Event('change'));
+      if (includePreprintInput) includePreprintInput.checked = true;
     }
 
     function showPage(id) {
@@ -4096,12 +4089,12 @@
         field: document.getElementById('fieldSelect').value,
         pageSize: Number(document.getElementById('pageSize').value),
         recentWeight: Number(document.getElementById('recentWeight').value),
-        includeKci: includeKciInput.checked,
-        includeCrossref: includeCrossrefInput.checked,
-        includePreprint: includeCrossrefInput.checked && includePreprintInput && includePreprintInput.checked,
+        includeKci: true,
+        includeCrossref: true,
+        includePreprint: true,
         sortOrder: resultSortOrder ? resultSortOrder.value : 'latest',
-        paperTypes: Array.from(form.querySelectorAll('input[name="paperType"]:checked')).map((el) => el.value),
-        globalTypes: Array.from(form.querySelectorAll('input[name="globalType"]:checked')).map((el) => el.value)
+        paperTypes: ['학술지', '석사', '박사'],
+        globalTypes: ['journal', 'preprint']
       };
     }
 
@@ -4229,10 +4222,9 @@
 
     function formatTrendGrowth(value) {
       const num = Number(value || 0);
-      if (!Number.isFinite(num)) return '+0%';
-      if (num < 0) return '안정적';
+      if (!Number.isFinite(num)) return '안정적';
       if (num < 5) return '안정적';
-      return `${num >= 0 ? '+' : ''}${Math.round(num)}%`;
+      return '급상승';
     }
 
     function renderTrendingTopics(items, meta) {
