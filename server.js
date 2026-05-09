@@ -333,7 +333,23 @@ async function analyzeTopicSources(payload) {
 			meta: { skipped: true, reason: 'Preprint disabled by user' }
 		});
 
-	const settled = await Promise.allSettled([kciTask, nanetTask, openAlexTask, crossrefTask, arxivTask]);
+	const semanticScholarTask = searchSemanticScholarPapers({
+		topic,
+		pageSize: Math.max(20, Math.round(pageSize * 0.3)),
+		fromYear,
+		untilYear
+	});
+
+	const openAlexKoTask = searchOpenAlexKoreanPapers({
+		topic,
+		fromYear,
+		untilYear,
+		pageSize: Math.max(20, Math.round(pageSize * 0.25)),
+		apiKey: openAlexApiKey,
+		mailto: openAlexMailto
+	});
+
+	const settled = await Promise.allSettled([kciTask, nanetTask, openAlexTask, crossrefTask, arxivTask, semanticScholarTask, openAlexKoTask]);
 
 	const warnings = [];
 	const kciResult = settled[0].status === 'fulfilled'
@@ -351,8 +367,16 @@ async function analyzeTopicSources(payload) {
 	const arxivResult = settled[4].status === 'fulfilled'
 		? settled[4].value
 		: handleSourceFailure('arXiv', settled[4].reason, warnings);
+	const semanticScholarResult = settled[5].status === 'fulfilled'
+		? settled[5].value
+		: { data: [], meta: { error: settled[5].reason?.message } };
+	const openAlexKoResult = settled[6].status === 'fulfilled'
+		? settled[6].value
+		: { data: [], meta: { error: settled[6].reason?.message } };
 	console.log(`[source-summary] KCI meta=${JSON.stringify(kciResult?.meta || {})}`);
 	console.log(`[source-summary] NANET meta=${JSON.stringify(nanetResult?.meta || {})}`);
+	console.log(`[source-summary] SemanticScholar: ${semanticScholarResult.data?.length || 0}건 (Korean=${(semanticScholarResult.data || []).filter((p) => p.language === 'ko').length}건)`);
+	console.log(`[source-summary] OpenAlexKO: ${openAlexKoResult.data?.length || 0}건`);
 
 	const kciSkipReason = String(kciResult?.meta?.reason || '');
 	const nanetSkipReason = String(nanetResult?.meta?.reason || '');
@@ -365,16 +389,25 @@ async function analyzeTopicSources(payload) {
 	if (!nanetKeyConfigured || /NANET API key not configured|No NANET API key/i.test(nanetSkipReason)) {
 		warnings.push('NANET_API_KEY가 설정되지 않아 국회도서관 논문 검색이 비활성화되었습니다. Render 환경변수에 NANET_API_KEY를 등록하세요.');
 	}
-	if ((kciResult?.data?.length || 0) === 0 && (nanetResult?.data?.length || 0) === 0 && kciKeyConfigured && nanetKeyConfigured) {
-		warnings.push('국내 DB (KCI/NANET) 검색 결과가 없습니다. 해외 논문 데이터를 기반으로 분석을 계속합니다.');
+
+	// Semantic Scholar & OpenAlex-KO가 한국 논문을 보완
+	const domesticFromSS = (semanticScholarResult.data || []).filter((p) => p.language === 'ko');
+	const domesticFromOAKo = openAlexKoResult.data || [];
+	const allDomesticKCI = [...(kciResult.data || []), ...(nanetResult.data || []), ...domesticFromSS, ...domesticFromOAKo];
+	if (allDomesticKCI.length === 0) {
+		warnings.push('국내 논문 검색 결과가 없습니다. 해외 논문 데이터를 기반으로 분석을 계속합니다.');
 	}
 
-	console.log(`[sources] KCI: ${kciResult.data ? kciResult.data.length : 0}, NANET: ${nanetResult.data ? nanetResult.data.length : 0}, OpenAlex: ${openAlexResult.data ? openAlexResult.data.length : 0}, Crossref: ${crossrefResult.data ? crossrefResult.data.length : 0}, arXiv: ${arxivResult.data ? arxivResult.data.length : 0}`);
+	console.log(`[sources] KCI: ${kciResult.data ? kciResult.data.length : 0}, NANET: ${nanetResult.data ? nanetResult.data.length : 0}, SemanticScholar-KO: ${domesticFromSS.length}, OpenAlexKO: ${domesticFromOAKo.length}, OpenAlex: ${openAlexResult.data ? openAlexResult.data.length : 0}, Crossref: ${crossrefResult.data ? crossrefResult.data.length : 0}, arXiv: ${arxivResult.data ? arxivResult.data.length : 0}`);
 	if (warnings.length > 0) {
 		console.log('[sources] Warnings:', warnings);
 	}
-	const mergedDomestic = mergeDomesticSources(kciResult.data, nanetResult.data);
-	const mergedGlobal = mergeGlobalSources(openAlexResult.data, crossrefResult.data, arxivResult.data);
+	const mergedDomestic = mergeDomesticSources(
+		[...(kciResult.data || []), ...(nanetResult.data || []), ...domesticFromSS, ...domesticFromOAKo],
+		[]
+	);
+	const ssGlobal = (semanticScholarResult.data || []).filter((p) => p.language !== 'ko');
+	const mergedGlobal = mergeGlobalSources(openAlexResult.data, crossrefResult.data, [...(arxivResult.data || []), ...ssGlobal]);
 	let merged = improvedDedupeByIdentifiers([...mergedDomestic, ...mergedGlobal]);
 
 	if (merged.length < Math.max(12, Math.round(pageSize * 0.08))) {
@@ -533,6 +566,8 @@ async function analyzeTopicSources(payload) {
 			domesticCount: mergedDomestic.length,
 			kciCount: kciResult.data.length,
 			nanetCount: nanetResult.data.length,
+			semanticScholarKoCount: domesticFromSS.length,
+			openAlexKoCount: domesticFromOAKo.length,
 			globalCount: mergedGlobal.length,
 			openAlexCount: openAlexResult.data.length,
 			crossrefCount: crossrefResult.data.length,
@@ -1344,6 +1379,98 @@ async function searchOpenAlexWorks(options) {
 			requestUrls: urls
 		}
 	};
+}
+
+async function searchSemanticScholarPapers(options) {
+	const { topic, pageSize, fromYear, untilYear } = options;
+	const perPage = Math.min(100, Math.max(10, pageSize));
+	const fields = 'title,abstract,year,authors,citationCount,externalIds,publicationTypes,journal,openAccessPdf';
+	const queries = dedupeStringArray([topic, normalizeKoreanQueryForDomesticSearch(topic)]).filter(Boolean).slice(0, 3);
+	const collected = [];
+
+	for (const q of queries) {
+		try {
+			const url = `https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(q)}&limit=${perPage}&fields=${encodeURIComponent(fields)}`;
+			console.log(`[SemanticScholar] 요청: query="${q}"`);
+			const json = await fetchJsonWithRetries(url, {
+				headers: { Accept: 'application/json', 'User-Agent': 'global-paper-analyzer/1.0' },
+				errorContext: 'SemanticScholar'
+			});
+			const items = Array.isArray(json?.data) ? json.data : [];
+			console.log(`[SemanticScholar] 응답: query="${q}" 결과=${items.length}건`);
+			for (const item of items) {
+				if (!item.title) continue;
+				const year = Number(item.year) || 0;
+				if (year && fromYear && year < fromYear) continue;
+				if (year && untilYear && year > untilYear) continue;
+				const authors = Array.isArray(item.authors)
+					? item.authors.map((a) => a.name || '').filter(Boolean).join(', ')
+					: '저자 미상';
+				const doi = item.externalIds?.DOI ? normalizeDoi(String(item.externalIds.DOI)) : '';
+				const journal = item.journal?.name || 'SemanticScholar';
+				const pdfUrl = item.openAccessPdf?.url || '';
+				const isKorean = /[\uAC00-\uD7AF]/.test(item.title) || /[\uAC00-\uD7AF]/.test(item.abstract || '');
+				collected.push({
+					title: String(item.title).trim(),
+					abstract: stripHtml(String(item.abstract || '').trim()),
+					keywords: [],
+					year: year || null,
+					author: authors || '저자 미상',
+					type: isKorean ? '국내 논문' : 'International Article',
+					field: '미상',
+					journal: String(journal).trim(),
+					citationCount: Number(item.citationCount) || 0,
+					doi,
+					url: pdfUrl || (doi ? `https://doi.org/${doi}` : ''),
+					source: isKorean ? 'SemanticScholar-KO' : 'SemanticScholar',
+					language: isKorean ? 'ko' : 'en'
+				});
+			}
+		} catch (err) {
+			console.error(`[SemanticScholar] 에러: query="${q}" ${err.message}`);
+		}
+	}
+
+	const deduped = dedupeNormalizedRecords(collected).slice(0, pageSize);
+	console.log(`[SemanticScholar] 최종: ${deduped.length}건 (Korean=${deduped.filter((p) => p.language === 'ko').length}건)`);
+	return { data: deduped, meta: { totalFetched: deduped.length } };
+}
+
+async function searchOpenAlexKoreanPapers(options) {
+	const { topic, fromYear, untilYear, pageSize, apiKey, mailto } = options;
+	const translatedTopic = normalizeKoreanQueryForDomesticSearch(topic);
+	const perPage = Math.min(OPENALEX_CONFIG.perPageCap, Math.max(20, pageSize));
+	const params = new URLSearchParams({
+		search: translatedTopic,
+		filter: `publication_year:${fromYear}-${untilYear},language:ko`,
+		select: OPENALEX_CONFIG.select,
+		per_page: String(perPage),
+		page: '1'
+	});
+	if (mailto || apiKey) params.set('mailto', mailto || apiKey);
+
+	const url = `${OPENALEX_CONFIG.baseUrl}?${params.toString()}`;
+	console.log(`[OpenAlexKO] 요청: query="${translatedTopic}" filter=language:ko`);
+	try {
+		const json = await fetchJsonWithRetries(url, {
+			headers: { Accept: 'application/json', 'User-Agent': `global-paper-analyzer/1.0 (mailto:${mailto || CROSSREF_MAILTO})` },
+			errorContext: 'OpenAlexKO'
+		});
+		const items = Array.isArray(json?.results) ? json.results : [];
+		console.log(`[OpenAlexKO] 응답: ${items.length}건`);
+		const records = items.map(normalizeOpenAlexRecord).filter(Boolean).map((r) => ({
+			...r,
+			source: 'OpenAlex-KO',
+			language: 'ko',
+			type: '국내 논문'
+		}));
+		const deduped = dedupeNormalizedRecords(records).slice(0, pageSize);
+		console.log(`[OpenAlexKO] 최종: ${deduped.length}건`);
+		return { data: deduped, meta: { totalFetched: deduped.length } };
+	} catch (err) {
+		console.error(`[OpenAlexKO] 에러: ${err.message}`);
+		return { data: [], meta: { error: err.message } };
+	}
 }
 
 async function searchNanetPapers(options) {
