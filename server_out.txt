@@ -242,3 +242,13 @@ Global paper analysis server running at http://localhost:3000
 [analyze] Result matchCount: 22
 [analyze] Result similarPapers count: 22
 [analyze] Analysis complete, sending response...
+[2026-05-08T15:50:23.295Z] GET /api/trending-topics
+[2026-05-08T15:50:23.303Z] GET /api/trending-topics
+[2026-05-08T15:50:23.306Z] GET /api/trending-topics
+[2026-05-08T16:08:45.888Z] GET /
+[2026-05-08T16:14:19.345Z] POST /
+[2026-05-08T16:14:21.039Z] POST /_next
+[2026-05-08T16:14:22.937Z] POST /api
+[2026-05-08T16:14:24.601Z] POST /_next/server
+[2026-05-08T16:14:25.445Z] POST /app
+[2026-05-08T16:14:26.268Z] POST /api/route

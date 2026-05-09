@@ -4230,6 +4230,8 @@
     function formatTrendGrowth(value) {
       const num = Number(value || 0);
       if (!Number.isFinite(num)) return '+0%';
+      if (num < 0) return '안정적';
+      if (num < 5) return '안정적';
       return `${num >= 0 ? '+' : ''}${Math.round(num)}%`;
     }
 
@@ -4245,7 +4247,7 @@
       if (!Array.isArray(items) || !items.length) {
         const noData = document.createElement('p');
         noData.className = 'trend-no-data';
-        noData.textContent = '상승률(+5% 이상)과 최근 30일 출판 건수를 충족한 키워드가 현재 없습니다.';
+        noData.textContent = '최근 30일 기준 키워드가 준비되지 않았습니다.';
         trendingGrid.appendChild(noData);
         return;
       }
@@ -4255,7 +4257,7 @@
         card.className = 'trend-card';
 
         const growth = Number(item.growth_rate || 0);
-        const growthClass = growth > 0 ? 'positive' : (growth < 0 ? 'negative' : 'neutral');
+        const growthClass = growth >= 5 ? 'positive' : 'neutral';
         const recentCount = Number(item.recent_count || 0);
 
         card.innerHTML = `

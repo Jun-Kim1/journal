@@ -163,10 +163,7 @@ const server = http.createServer(async (req, res) => {
 			const topN = clampNumber(Number(requestUrl.searchParams.get('topN') || 4), 4, 1, 8);
 			const forceRefresh = String(requestUrl.searchParams.get('refresh') || '').toLowerCase() === 'true';
 			const trendResult = await getTrendingTopics({ topN, forceRefresh });
-			const range = trendResult.meta && trendResult.meta.dateRange ? trendResult.meta.dateRange : null;
-			const basisText = range
-				? `최근 30일 API 집계 (${range.recentStart}~${range.recentEnd}) · 상승률 +${TREND_MIN_GROWTH_RATE}% 이상`
-				: `최근 30일 API 집계 · 상승률 +${TREND_MIN_GROWTH_RATE}% 이상`;
+			const basisText = '최근 30일';
 			sendJson(res, 200, {
 				ok: true,
 				data: trendResult.data,
@@ -255,7 +252,12 @@ async function analyzeTopicSources(payload) {
 	const queryPack = await buildQueryPack(topic);
 	const translatedTopic = queryPack.translatedTopic;
 	const globalQueryTopic = queryPack.globalQueryTopic;
-	const globalQueryCandidates = [queryPack.primaryQueryEn, ...queryPack.expandedQueries].filter(Boolean).slice(0, 4);
+	const globalQueryCandidates = dedupeStringArray([
+		queryPack.primaryQueryEn,
+		queryPack.globalQueryTopic,
+		...queryPack.expandedQueries,
+		...buildScenarioQueryVariants(queryPack)
+	]).filter(Boolean).slice(0, 8);
 
 	const kciTask = includeKci
 		? searchKciPapers({
@@ -370,17 +372,20 @@ async function analyzeTopicSources(payload) {
 	const mergedGlobal = mergeGlobalSources(openAlexResult.data, crossrefResult.data, arxivResult.data);
 	let merged = improvedDedupeByIdentifiers([...mergedDomestic, ...mergedGlobal]);
 
-	if (merged.length === 0) {
-		const recoveryQuery = dedupeStringArray([
+	if (merged.length < Math.max(12, Math.round(pageSize * 0.08))) {
+		const recoveryQueries = dedupeStringArray([
 			translatedTopic,
 			globalQueryTopic,
+			queryPack.primaryQueryEn,
+			...queryPack.expandedQueries,
+			...buildScenarioQueryVariants(queryPack),
 			topic
-		]).find(Boolean) || topic;
+		]).filter(Boolean).slice(0, 8);
 		try {
-			const [openAlexRecovery, crossrefRecovery] = await Promise.all([
-				searchOpenAlexWorks({
+			const [openAlexRecovery, crossrefRecovery, arxivRecovery] = await Promise.all([
+				searchAcrossQueryVariants(recoveryQueries, (query) => searchOpenAlexWorks({
 					topic,
-					translatedTopic: recoveryQuery,
+					translatedTopic: query,
 					fromYear,
 					untilYear,
 					globalTypes: globalTypesResult,
@@ -388,24 +393,33 @@ async function analyzeTopicSources(payload) {
 					apiKey: openAlexApiKey,
 					mailto: openAlexMailto,
 					strictRelevance: false
-				}),
-				searchCrossrefPapers({
+				}), Math.max(120, pageSize)),
+				searchAcrossQueryVariants(recoveryQueries, (query) => searchCrossrefPapers({
 					topic,
-					translatedTopic: recoveryQuery,
+					translatedTopic: query,
 					fromYear,
 					untilYear,
 					pageSize: Math.max(100, Math.round(pageSize * 0.7)),
 					globalTypes: globalTypesResult,
 					strictRelevance: false
-				})
+				}), Math.max(100, Math.round(pageSize * 0.7))),
+				searchAcrossQueryVariants(recoveryQueries, (query) => searchArxivPapers({
+					topic,
+					translatedTopic: query,
+					fromYear,
+					untilYear,
+					pageSize: Math.max(40, Math.round(pageSize * 0.3)),
+					strictRelevance: false
+				}), Math.max(40, Math.round(pageSize * 0.3)))
 			]);
 			const recoveryMerged = improvedDedupeByIdentifiers([
 				...(openAlexRecovery.data || []),
-				...(crossrefRecovery.data || [])
+				...(crossrefRecovery.data || []),
+				...(arxivRecovery.data || [])
 			]);
 			if (recoveryMerged.length > 0) {
 				warnings.push('일부 API 응답 저하로 글로벌 복구 검색을 적용했습니다.');
-				merged = recoveryMerged;
+				merged = improvedDedupeByIdentifiers([...merged, ...recoveryMerged]);
 			}
 		} catch (recoveryError) {
 			warnings.push(`복구 검색 시도 실패: ${String(recoveryError?.message || recoveryError || 'unknown')}`);
@@ -428,7 +442,15 @@ async function analyzeTopicSources(payload) {
 
 	// 도메인 필수 키워드 감지 및 필터링 (요구사항 2, 3)
 	const domainMustKeywords = buildDomainMustKeywords(queryPack);
-	const domainFiltered = filterByDomainRelevance(merged, domainMustKeywords);
+	let domainFiltered = filterByDomainRelevance(merged, domainMustKeywords);
+
+	if (domainFiltered.length < Math.min(8, Math.max(4, Math.round(pageSize * 0.04)))) {
+		const relevanceRanked = rankByQueryAffinity(merged, queryPack, domainMustKeywords);
+		domainFiltered = relevanceRanked.slice(0, pageSize);
+		if (merged.length > 0 && domainFiltered.length > 0) {
+			warnings.push('유사 주제 확장 검색을 적용해 관련 논문 후보를 보강했습니다.');
+		}
+	}
 
 	if (domainFiltered.length === 0 && merged.length === 0 && failedSources.length) {
 		const failureDetail = failedSources
@@ -592,6 +614,89 @@ function getTrendDateRanges() {
 		prevStartYmd: formatDateYmd(prevStart),
 		prevEndYmd: formatDateYmd(prevEnd)
 	};
+}
+
+function buildScenarioQueryVariants(queryPack) {
+	const baseQuery = String(queryPack?.primaryQueryEn || queryPack?.globalQueryTopic || '').trim();
+	if (!baseQuery) {
+		return [];
+	}
+
+	const topicKo = String(queryPack?.primaryQueryKo || '').trim();
+	const hasSelfEfficacy = /self-efficacy|self efficacy|자기효능감/i.test(`${baseQuery} ${topicKo}`);
+	const hasGenerativeAi = /generative|llm|large language model|chatgpt|생성형|인공지능|ai/i.test(`${baseQuery} ${topicKo}`);
+	if (!hasSelfEfficacy && !hasGenerativeAi) {
+		return [];
+	}
+
+	const scenarios = [
+		'programmer self-efficacy generative ai',
+		'developer self-efficacy large language model',
+		'artist self-efficacy generative ai creativity',
+		'student self-efficacy generative ai education'
+	];
+
+	return dedupeStringArray(scenarios.map((scenario) => `${baseQuery} ${scenario}`.trim())).slice(0, 4);
+}
+
+function rankByQueryAffinity(papers, queryPack, mustKeywordsByCategory) {
+	if (!Array.isArray(papers) || !papers.length) {
+		return [];
+	}
+
+	const queryTokens = dedupeStringArray([
+		...tokenizeEnglish(queryPack?.primaryQueryEn || ''),
+		...tokenizeEnglish(queryPack?.globalQueryTopic || ''),
+		...(Array.isArray(queryPack?.coreKeywordsKo) ? queryPack.coreKeywordsKo : []),
+		...(Array.isArray(queryPack?.coreKeywordsEn) ? queryPack.coreKeywordsEn : [])
+	]).filter((token) => String(token || '').trim().length >= 2);
+	const mustTokens = dedupeStringArray(Object.values(mustKeywordsByCategory || {}).flat());
+	const highIntentTokens = new Set([
+		'self-efficacy', 'self efficacy', '자기효능감',
+		'programmer', 'developer', 'software engineer', '프로그래머', '개발자',
+		'artist', 'creator', 'creative', '예술가', '창작자',
+		'generative', 'llm', 'chatgpt', '생성형'
+	]);
+
+	const scored = papers.map((paper) => {
+		const text = [
+			paper.title || '',
+			paper.abstract || '',
+			...(Array.isArray(paper.keywords) ? paper.keywords : [])
+		].join(' ').toLowerCase();
+
+		let score = 0;
+		for (const tokenRaw of queryTokens) {
+			const token = String(tokenRaw || '').toLowerCase().trim();
+			if (!token) continue;
+			if (text.includes(token)) {
+				score += highIntentTokens.has(token) ? 2.4 : 1.0;
+			}
+		}
+
+		for (const tokenRaw of mustTokens) {
+			const token = String(tokenRaw || '').toLowerCase().trim();
+			if (!token) continue;
+			if (text.includes(token)) {
+				score += highIntentTokens.has(token) ? 1.8 : 0.8;
+			}
+		}
+
+		if ((paper.source === 'KCI' || paper.source === 'NANET') && /[가-힣]/.test(`${paper.title || ''} ${paper.abstract || ''}`)) {
+			score += 1.2;
+		}
+
+		score += Math.min((Number(paper.citationCount || 0) || 0) / 200, 0.6);
+		return { paper, score };
+	});
+
+	scored.sort((a, b) => b.score - a.score);
+	const strongMatches = scored.filter((item) => item.score >= 1.0).map((item) => item.paper);
+	if (strongMatches.length) {
+		return strongMatches;
+	}
+
+	return scored.map((item) => item.paper);
 }
 
 function computeGrowthRate(recentTotal, prevTotal) {
@@ -781,19 +886,52 @@ async function getTrendingTopics(options) {
 		.filter((item) => Number(item.recent_count || 0) > 0)
 		.filter((item) => Number(item.source_status?.recent_success || 0) >= TREND_MIN_SOURCE_SUCCESS);
 
-	const strictTrending = fulfilled
+	const normalizeTrendKey = (item) => String(item.topic || '').trim().toLowerCase();
+	const seenTopics = new Set();
+	const pushUnique = (list) => {
+		const results = [];
+		for (const item of list) {
+			const key = normalizeTrendKey(item);
+			if (!key || seenTopics.has(key)) {
+				continue;
+			}
+			seenTopics.add(key);
+			results.push(item);
+			if (results.length >= topN) {
+				break;
+			}
+		}
+		return results;
+	};
+
+	const hot = fulfilled
 		.filter((item) => Number(item.growth_rate || 0) >= TREND_MIN_GROWTH_RATE)
 		.sort((a, b) => (Number(b.growth_rate || 0) - Number(a.growth_rate || 0)) || (Number(b.recent_count || 0) - Number(a.recent_count || 0)));
+	const steady = fulfilled
+		.filter((item) => Number(item.growth_rate || 0) >= 0 && Number(item.growth_rate || 0) < TREND_MIN_GROWTH_RATE)
+		.sort((a, b) => (Number(b.recent_count || 0) - Number(a.recent_count || 0)) || (Number(b.growth_rate || 0) - Number(a.growth_rate || 0)));
+	const popular = fulfilled
+		.sort((a, b) => (Number(b.recent_count || 0) - Number(a.recent_count || 0)) || (Number(b.growth_rate || 0) - Number(a.growth_rate || 0)));
 
-	const seenTopics = new Set();
-	const data = strictTrending.filter((item) => {
-		const key = String(item.topic || '').trim().toLowerCase();
-		if (!key || seenTopics.has(key)) {
-			return false;
+	let data = pushUnique(hot);
+	if (data.length < topN) {
+		data = [...data, ...pushUnique(steady)];
+	}
+	if (data.length < topN) {
+		data = [...data, ...pushUnique(popular)];
+	}
+	data = data.slice(0, topN);
+
+	// 4칸 보장: 최종적으로 부족하면 인기 키워드로라도 채움
+	if (data.length < topN) {
+		for (const item of popular) {
+			if (data.length >= topN) break;
+			const key = normalizeTrendKey(item);
+			if (key && !data.some((entry) => normalizeTrendKey(entry) === key)) {
+				data.push(item);
+			}
 		}
-		seenTopics.add(key);
-		return true;
-	}).slice(0, topN);
+	}
 	trendingTopicsCache = {
 		expiresAt: now + TREND_CACHE_TTL_MS,
 		updatedAt: now,
@@ -1200,6 +1338,9 @@ const KO_TO_EN_TERMS = {
 	'생성형ai': 'generative ai',
 	'프로그래머': 'programmer software developer',
 	'개발자': 'developer software engineer',
+	'예술가': 'artist creator creative professional',
+	'창작자': 'artist creator creative professional',
+	'디자이너': 'designer creative professional',
 	'활용': 'utilization use impact',
 	'영향': 'impact effect influence',
 	'교사': 'teacher',
@@ -1358,6 +1499,8 @@ function buildGlobalQueryText(topic, translatedTopic) {
 			'self-confidence',
 			'programmer self-efficacy',
 			'developer confidence',
+			'artist self-efficacy',
+			'creative self-efficacy',
 			'software engineer motivation',
 			'not teachers not students'
 		].join(' '));
@@ -1520,8 +1663,8 @@ function buildDomainMustKeywords(queryPack) {
 
 	const DOMAIN_CATEGORY_MAP = {
 		agent: {
-			detect: ['programmer', 'developer', 'software engineer', 'coder'],
-			must: ['programmer', 'developer', 'software engineer', 'coder', 'software development', 'engineering']
+			detect: ['programmer', 'developer', 'software engineer', 'coder', 'artist', 'creator', 'designer'],
+			must: ['programmer', 'developer', 'software engineer', 'coder', 'artist', 'creator', 'designer', 'software development', 'engineering']
 		},
 		psychology: {
 			detect: ['self-efficacy', 'self efficacy', 'efficacy', 'confidence', 'psychological'],
