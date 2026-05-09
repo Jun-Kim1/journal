@@ -1958,11 +1958,17 @@ function buildKoreanDomesticQueryVariants(topic) {
 
 	const keywords = extractCoreKeywords(normalized)
 		.filter((token) => /[가-힣a-zA-Z]/.test(token))
-		.filter((token) => !['영향', '효과', '활용', '연구', '분석', '중심', '미치는', '대한'].includes(token))
+		.filter((token) => !['영향', '효과', '활용', '활용이', '연구', '분석', '중심', '미치는', '미치', '대한', '자기', '효능감에', '효능감'].includes(token))
 		.slice(0, 6);
 	const englishBoost = /자기효능감|self-efficacy/i.test(normalized)
 		? ['self-efficacy', 'academic self-efficacy', 'developer confidence', 'artist creativity confidence', 'programmer self-efficacy']
 		: [];
+
+	const compactConceptQuery = dedupeStringArray([
+		/자기효능감|self-efficacy/i.test(normalized) ? '자기효능감' : '',
+		/생성형|genai|generative|ai/i.test(normalized) ? '생성형 AI' : '',
+		/academic self-efficacy|학습효능감|learner self-efficacy/i.test(normalized) ? 'academic self-efficacy' : ''
+	]).join(' ').trim();
 
 	const pairs = [];
 	for (let i = 0; i < keywords.length; i += 1) {
@@ -1972,6 +1978,7 @@ function buildKoreanDomesticQueryVariants(topic) {
 	}
 
 	return dedupeStringArray([
+		compactConceptQuery,
 		normalized,
 		...keywords,
 		...englishBoost,
@@ -2107,62 +2114,92 @@ function buildNanetRequestCandidates(options) {
 		String(NANET_CONFIG.legacyBaseUrl || '').trim()
 	]).filter(Boolean);
 
-	const candidates = [];
-	for (const base of bases) {
-		const modernUrl = new URL(base);
+	try {
+		const candidates = buildNanetRequestCandidates({ topic, pageSize, apiKey });
+		let lastError = null;
+		let bestEmptyMeta = null;
 		modernUrl.searchParams.set('apiKey', apiKey);
-		modernUrl.searchParams.set('searchKey', topic);
-		modernUrl.searchParams.set('pageSize', String(Math.min(pageSize, NANET_CONFIG.perPageCap)));
-		modernUrl.searchParams.set('pageNum', '1');
-		modernUrl.searchParams.set('resultType', 'json');
-		if (startDate) modernUrl.searchParams.set('startDate', startDate);
-		if (endDate) modernUrl.searchParams.set('endDate', endDate);
-		candidates.push({ label: `${base.includes('openapi') ? 'openapi' : 'legacy'}-modern`, url: modernUrl.toString() });
+		for (const candidate of candidates) {
+			try {
+				console.log(`[NANET] 요청 시작: query="${topic}" candidate=${candidate.label} url=${redactSensitiveUrl(candidate.url)}`);
+				const response = await fetchJsonWithRetries(candidate.url, {
+					headers: { Accept: 'application/json' },
+					errorContext: `NANET ${candidate.label}`
+				});
 
-		const legacyUrl = new URL(base);
-		legacyUrl.searchParams.set('key', apiKey);
-		legacyUrl.searchParams.set('query', topic);
-		legacyUrl.searchParams.set('pageSize', String(Math.min(pageSize, NANET_CONFIG.perPageCap)));
-		legacyUrl.searchParams.set('pageNum', '1');
-		legacyUrl.searchParams.set('resultType', 'json');
-		legacyUrl.searchParams.set('sort', 'RANK');
-		if (startDate) legacyUrl.searchParams.set('startDate', startDate);
-		if (endDate) legacyUrl.searchParams.set('endDate', endDate);
-		candidates.push({ label: `${base.includes('openapi') ? 'openapi' : 'legacy'}-legacy`, url: legacyUrl.toString() });
-	}
+				const docs = extractNanetDocuments(response);
+				const records = docs
+					.map((doc) => normalizeNanetRecord(doc, fromYear, untilYear))
+					.filter(Boolean);
+				const totalCount = extractNanetTotalCount(response, records.length);
+				console.log(`[NANET] 응답 성공: candidate=${candidate.label} 결과=${records.length}건 (totalCount=${totalCount})`);
 
-	return dedupeByKey(candidates, (item) => item.url);
-}
+				if (records.length > 0 || totalCount > 0) {
+					return {
+						data: records,
+						meta: {
+							totalFetched: records.length,
+							requestUrl: candidate.url,
+							totalCount,
+							candidate: candidate.label
+						}
+					};
+				}
 
-function extractNanetDocuments(payload) {
-	if (!payload) return [];
-	if (Array.isArray(payload)) return payload;
-	if (Array.isArray(payload.documents)) return payload.documents;
-	if (Array.isArray(payload.items)) return payload.items;
-	if (Array.isArray(payload.data)) return payload.data;
-	if (Array.isArray(payload.result?.documents)) return payload.result.documents;
-	if (Array.isArray(payload.result?.items)) return payload.result.items;
-	if (Array.isArray(payload.resultList)) return payload.resultList;
-	if (Array.isArray(payload.list)) return payload.list;
-	return [];
-}
-
-function extractNanetTotalCount(payload, fallback = 0) {
-	const candidates = [
-		payload?.totalCount,
-		payload?.count,
-		payload?.result?.totalCount,
-		payload?.result?.count,
-		payload?.meta?.totalCount,
-		payload?.meta?.count
-	];
-	for (const value of candidates) {
-		const num = Number(value);
-		if (Number.isFinite(num) && num >= 0) {
-			return num;
+				if (!bestEmptyMeta) {
+					bestEmptyMeta = {
+						totalFetched: 0,
+						requestUrl: candidate.url,
+						totalCount,
+						candidate: candidate.label
+					};
+				}
+			} catch (error) {
+				lastError = error;
+				console.error(`[NANET] candidate 실패: ${candidate.label} name=${error?.name} message=${error?.message}`);
+			}
 		}
+
+		if (bestEmptyMeta) {
+			try {
+				const losiFallback = await searchNanetPapersViaLosi({
+					topic,
+					pageSize,
+					fromYear,
+					untilYear
+				});
+				if (losiFallback.data.length) {
+					return losiFallback;
+				}
+			} catch (losiError) {
+				console.error(`[NANET] LOSI fallback 실패: name=${losiError?.name} message=${losiError?.message}`);
+			}
+
+			return { data: [], meta: { ...bestEmptyMeta, skipped: false, reason: '' } };
+		}
+
+		return {
+			data: [],
+			meta: {
+				totalFetched: 0,
+				skipped: false,
+				reason: '',
+				candidate: 'none'
+			}
+		};
+	} catch (error) {
+		console.error(`[NANET] 에러: name=${error?.name} message=${error?.message}`);
+		return {
+			data: [],
+			meta: {
+				totalFetched: 0,
+				skipped: false,
+				reason: '',
+				candidate: 'exception'
+			}
+ 		};
 	}
-	return Number(fallback) || 0;
+
 }
 
 async function fetchJsonWithRetries(url, options) {
@@ -2177,7 +2214,6 @@ async function fetchJsonWithRetries(url, options) {
 				signal: AbortSignal.timeout(60000) // Render Cold Start 고려: 60초
 			});
 
-			// Log HTTP status for KCI/NANET to help diagnose Render IP-blocking
 			if (/kci|nanet/i.test(errorContext)) {
 				console.log(`[${errorContext}] HTTP 응답 상태: ${response.status} ${response.statusText}`);
 			}
@@ -2195,7 +2231,6 @@ async function fetchJsonWithRetries(url, options) {
 				throw createError(response.status, `${errorContext} 요청 실패: ${message || response.statusText}`);
 			}
 
-			// Detect HTML error pages (e.g. NANET IP-restriction returns HTTP 200 with HTML body)
 			const responseText = await response.text();
 			if (responseText.trimStart().startsWith('<')) {
 				throw createError(503, `${errorContext} 서버가 HTML 페이지를 반환했습니다 (IP 접근 제한 또는 서버 오류)`);
