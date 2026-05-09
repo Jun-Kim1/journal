@@ -1109,17 +1109,19 @@ async function searchKciPapers(options) {
 			serviceKey,
 			serviceKeyMode
 		});
-		const json = await fetchJsonWithRetries(upstreamUrl, {
-			headers: { Accept: 'application/json' },
-			errorContext: `KCI ${paperType}`
-		});
-		return {
-			paperType,
-			query,
-			useTypeFilter,
-			url: upstreamUrl,
-			items: extractKciRecords(json).map(normalizeKciRecord).filter(Boolean)
-		};
+		console.log(`[KCI] 요청 시작: type=${effectiveType || '없음'} query="${query}" url=${redactSensitiveUrl(upstreamUrl)}`);
+		try {
+			const json = await fetchJsonWithRetries(upstreamUrl, {
+				headers: { Accept: 'application/json' },
+				errorContext: `KCI ${paperType}`
+			});
+			const items = extractKciRecords(json).map(normalizeKciRecord).filter(Boolean);
+			console.log(`[KCI] 응답 성공: type=${effectiveType || '없음'} query="${query}" 결과=${items.length}건`);
+			return { paperType, query, useTypeFilter, url: upstreamUrl, items };
+		} catch (err) {
+			console.error(`[KCI] 에러: type=${effectiveType || '없음'} query="${query}" name=${err.name} message=${err.message}`);
+			return { paperType, query, useTypeFilter, url: upstreamUrl, items: [] };
+		}
 	}));
 
 	const merged = dedupeNormalizedRecords(responses.flatMap((entry) => entry.items)).slice(0, pageSize);
@@ -1253,6 +1255,7 @@ async function searchNanetPapers(options) {
 			pageSize,
 			apiKey
 		});
+		console.log(`[NANET] 요청 시작: query="${topic}" url=${redactSensitiveUrl(requestUrl)}`);
 
 		const response = await fetchJsonWithRetries(requestUrl, {
 			headers: { Accept: 'application/json' },
@@ -1264,6 +1267,7 @@ async function searchNanetPapers(options) {
 				.map((doc) => normalizeNanetRecord(doc, fromYear, untilYear))
 				.filter(Boolean)
 			: [];
+		console.log(`[NANET] 응답 성공: 결과=${records.length}건 (totalCount=${Number(response?.totalCount) || '?'})`);
 
 		return {
 			data: records,
@@ -1274,6 +1278,7 @@ async function searchNanetPapers(options) {
 			}
 		};
 	} catch (error) {
+		console.error(`[NANET] 에러: name=${error && error.name} message=${error && error.message}`);
 		return {
 			data: [],
 			meta: {
@@ -1949,6 +1954,11 @@ async function fetchJsonWithRetries(url, options) {
 				signal: AbortSignal.timeout(60000) // Render Cold Start 고려: 60초
 			});
 
+			// Log HTTP status for KCI/NANET to help diagnose Render IP-blocking
+			if (/kci|nanet/i.test(errorContext)) {
+				console.log(`[${errorContext}] HTTP 응답 상태: ${response.status} ${response.statusText}`);
+			}
+
 			if (response.status === 429) {
 				throw createError(429, '요청이 너무 많습니다. 잠시 후 다시 시도하세요.');
 			}
@@ -1974,6 +1984,9 @@ async function fetchJsonWithRetries(url, options) {
 			}
 		} catch (error) {
 			lastError = error;
+			if (/kci|nanet/i.test(errorContext)) {
+				console.error(`[${errorContext}] fetch 예외 (attempt ${attempt + 1}): name=${error.name} message=${error.message}`);
+			}
 			if (!shouldRetry(error) || attempt === 1) {
 				throw error;
 			}
