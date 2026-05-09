@@ -41,7 +41,10 @@ function buildAnalysisReport(cfg, records, meta) {
 		const citationBoost = cfg.useCitationBoost && record.citationCount > 0
 			? Math.min(1.05, 1 + Math.log1p(record.citationCount) / 100)
 			: 1.0;
-		const rawSimilarity = clampRange((titleScore * 0.48 + keywordScore * 0.30 + abstractScore * 0.14 + domainBoost * 0.08) * sourceWeight * citationBoost, 0, 1);
+		// Concept coverage multiplier: papers missing key concepts (e.g. AI-only, no self-efficacy)
+		// get penalized so they rank below papers covering all required concepts.
+		const conceptCovMult = computeConceptCoverageMultiplier(record, domainSignals);
+		const rawSimilarity = clampRange((titleScore * 0.48 + keywordScore * 0.30 + abstractScore * 0.14 + domainBoost * 0.08) * sourceWeight * citationBoost * conceptCovMult, 0, 1);
 		// fullUrl: doi 우선, url fallback
 		const doi = record.doi || '';
 		const fullUrl = doi ? (doi.startsWith('http') ? doi : `https://doi.org/${doi}`) : (record.url || '');
@@ -66,6 +69,8 @@ function buildAnalysisReport(cfg, records, meta) {
 
 	// If relevance filters are too strict, keep a broader affinity-ranked pool
 	// to avoid returning only 0-2 papers for broad Korean queries.
+	// But still prefer papers that cover the required domain concepts (concept coverage multiplier
+	// is already baked into similarity scores, so sorting by similarity still respects it).
 	if (relevant.length < Math.min(20, Math.max(8, Math.round(scored.length * 0.2)))) {
 		relevant = [...scored]
 			.sort((a, b) => Number(b.similarity || 0) - Number(a.similarity || 0))
@@ -481,6 +486,36 @@ function computeDomainBoostForRecord(record, domainSignals) {
 	}
 	const covered = (agentMatchCount > 0 ? 1 : 0) + (aiMatchCount > 0 ? 1 : 0) + (psychologyMatchCount > 0 ? 1 : 0);
 	return clampRange(covered / totalRequired, 0, 1);
+}
+
+// Concept coverage multiplier: penalizes papers that do not cover ALL required domain concepts.
+// For "생성형 AI + 자기효능감" queries, a paper with only AI keywords (no self-efficacy) gets 0.70,
+// a paper with neither concept gets 0.40. Papers covering all concepts get 1.0.
+// Per md spec: similarity * (0.4 + 0.6 * coverageRatio)
+function computeConceptCoverageMultiplier(record, domainSignals) {
+	if (!domainSignals || !domainSignals.hasAny) return 1.0;
+
+	const text = `${record.title || ''} ${record.abstract || ''} ${Array.isArray(record.keywords) ? record.keywords.join(' ') : ''}`.toLowerCase();
+
+	let required = 0;
+	let covered = 0;
+
+	if (domainSignals.hasAi) {
+		required++;
+		if (domainSignals.aiKeywords.some((kw) => text.includes(kw))) covered++;
+	}
+	if (domainSignals.hasPsychology) {
+		required++;
+		if (domainSignals.psychologyKeywords.some((kw) => text.includes(kw))) covered++;
+	}
+	if (domainSignals.hasAgent) {
+		required++;
+		if (domainSignals.agentKeywords.some((kw) => text.includes(kw))) covered++;
+	}
+
+	if (!required) return 1.0;
+	const ratio = covered / required;
+	return 0.4 + 0.6 * ratio;
 }
 
 function normalizeSimilarityScores(records) {

@@ -632,10 +632,10 @@ function buildScenarioQueryVariants(queryPack) {
 	}
 
 	const scenarios = [
+		'generative ai self-efficacy effects academic',      // general — no person-type bias
+		'llm self-efficacy student learning',                // student context
 		'programmer self-efficacy generative ai',
-		'developer self-efficacy large language model',
-		'artist self-efficacy generative ai creativity',
-		'student self-efficacy generative ai education'
+		'developer self-efficacy large language model'
 	];
 
 	// Use scenarios as standalone queries (not prepended with full base query).
@@ -692,6 +692,21 @@ function rankByQueryAffinity(papers, queryPack, mustKeywordsByCategory) {
 		}
 
 		score += Math.min((Number(paper.citationCount || 0) || 0) / 200, 0.6);
+
+		// Per-category penalty: if paper is missing ANY must-keyword category entirely,
+		// apply 0.3x multiplier per missing category.
+		// This prevents generative-AI-only papers from outranking self-efficacy papers
+		// when the query requires both concepts.
+		for (const [, categoryKeywords] of Object.entries(mustKeywordsByCategory || {})) {
+			const hasCategoryMatch = categoryKeywords.some((kw) => {
+				const k = String(kw || '').toLowerCase().trim();
+				return k && text.includes(k);
+			});
+			if (!hasCategoryMatch) {
+				score *= 0.3;
+			}
+		}
+
 		return { paper, score };
 	});
 
@@ -1581,8 +1596,15 @@ async function buildQueryPack(topic) {
 		})
 	);
 	
+	// General self-efficacy queries should not be biased toward programmer/developer papers.
+	// Only add person-specific hints when the query explicitly mentions those roles.
+	const isAgentSpecific = /프로그래머|개발자|programmer|developer|artist|creator|designer/i.test(primaryQueryKo);
 	const selfEfficacyHints = /자기효능감|self-efficacy/i.test(primaryQueryKo)
-		? ['self-efficacy', 'self-confidence', 'developer confidence', 'programmer']
+		? [
+			'self-efficacy',
+			'academic self-efficacy',
+			...(isAgentSpecific ? ['developer confidence', 'programmer'] : ['student self-efficacy', 'learner self-efficacy'])
+		]
 		: [];
 
 	const coreKeywordsEn = dedupeStringArray(keywordExpansions.flatMap((item) => [
