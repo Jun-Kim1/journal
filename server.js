@@ -217,7 +217,7 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, HOST, () => {
 	console.log(`Global paper analysis server running at http://localhost:${PORT}`);
-	console.log(`[startup] build=2026-05-09-nanet-v3-kci-fallback nanetBaseUrl=${NANET_CONFIG.baseUrl}`);
+	console.log(`[startup] build=2026-05-09-nanet-v5-dedupefix nanetBaseUrl=${NANET_CONFIG.baseUrl}`);
 	console.log(`[startup] kciKeyConfigured=${Boolean(String(KCI_CONFIG.defaultServiceKey || '').trim())} nanetKeyConfigured=${Boolean(String(NANET_CONFIG.apiKey || '').trim())}`);
 });
 
@@ -351,6 +351,8 @@ async function analyzeTopicSources(payload) {
 	const arxivResult = settled[4].status === 'fulfilled'
 		? settled[4].value
 		: handleSourceFailure('arXiv', settled[4].reason, warnings);
+	console.log(`[source-summary] KCI meta=${JSON.stringify(kciResult?.meta || {})}`);
+	console.log(`[source-summary] NANET meta=${JSON.stringify(nanetResult?.meta || {})}`);
 
 	const kciSkipReason = String(kciResult?.meta?.reason || '');
 	const nanetSkipReason = String(nanetResult?.meta?.reason || '');
@@ -1159,7 +1161,16 @@ async function searchKciPapers(options) {
 				headers: { Accept: 'application/json' },
 				errorContext: `KCI ${paperType}`
 			});
-			const items = extractKciRecords(json).map(normalizeKciRecord).filter(Boolean);
+			const rawItems = extractKciRecords(json);
+			const totalCount = Number(json?.totalCount || json?.matchCount || json?.currentCount || 0);
+			const items = rawItems.map(normalizeKciRecord).filter(Boolean);
+			if (rawItems.length && !items.length) {
+				const first = rawItems[0] || {};
+				console.log(`[KCI] 정규화 누락 감지: type=${effectiveType || '없음'} query="${query}" raw=${rawItems.length} normalized=0 keys=${Object.keys(first).slice(0, 20).join(',')}`);
+			}
+			if (!rawItems.length && totalCount > 0) {
+				console.log(`[KCI] API 카운트 불일치: type=${effectiveType || '없음'} query="${query}" totalCount=${totalCount} raw=0`);
+			}
 			console.log(`[KCI] 응답 성공: type=${effectiveType || '없음'} query="${query}" 결과=${items.length}건`);
 			return { paperType, query, useTypeFilter, url: upstreamUrl, items };
 		} catch (err) {
@@ -1196,7 +1207,16 @@ async function searchKciPapers(options) {
 					headers: { Accept: 'application/json' },
 					errorContext: `KCI fallback ${queryField}`
 				});
-				const items = extractKciRecords(json).map(normalizeKciRecord).filter(Boolean);
+				const rawItems = extractKciRecords(json);
+				const totalCount = Number(json?.totalCount || json?.matchCount || json?.currentCount || 0);
+				const items = rawItems.map(normalizeKciRecord).filter(Boolean);
+				if (rawItems.length && !items.length) {
+					const first = rawItems[0] || {};
+					console.log(`[KCI] fallback 정규화 누락: field=${queryField} query="${query}" raw=${rawItems.length} normalized=0 keys=${Object.keys(first).slice(0, 20).join(',')}`);
+				}
+				if (!rawItems.length && totalCount > 0) {
+					console.log(`[KCI] fallback API 카운트 불일치: field=${queryField} query="${query}" totalCount=${totalCount} raw=0`);
+				}
 				console.log(`[KCI] fallback 응답: field=${queryField} query="${query}" 결과=${items.length}건`);
 				return items;
 			} catch (error) {
@@ -2722,6 +2742,18 @@ function normalizeGlobalTypes(globalTypes, includePreprintFallback) {
 
 function dedupeStringArray(values) {
 	return Array.from(new Set((values || []).filter(Boolean).map((item) => String(item).trim())));
+}
+
+function dedupeByKey(items, keyFn) {
+	const seen = new Set();
+	const out = [];
+	for (const item of (items || [])) {
+		const key = String(keyFn ? keyFn(item) : '').trim();
+		if (!key || seen.has(key)) continue;
+		seen.add(key);
+		out.push(item);
+	}
+	return out;
 }
 
 function normalizeDoi(value) {
