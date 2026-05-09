@@ -216,6 +216,8 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, HOST, () => {
 	console.log(`Global paper analysis server running at http://localhost:${PORT}`);
+	console.log(`[startup] build=2026-05-09-nanet-v2 nanetBaseUrl=${NANET_CONFIG.baseUrl}`);
+	console.log(`[startup] kciKeyConfigured=${Boolean(String(KCI_CONFIG.defaultServiceKey || '').trim())} nanetKeyConfigured=${Boolean(String(NANET_CONFIG.apiKey || '').trim())}`);
 });
 
 async function analyzeTopicSources(payload) {
