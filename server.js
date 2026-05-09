@@ -71,6 +71,7 @@ const LLM_EXPANSION_CONFIG = {
 
 const NANET_CONFIG = {
 	baseUrl: process.env.NANET_BASE_URL || 'https://openapi.nanet.go.kr/search/v1/article',
+	legacyBaseUrl: process.env.NANET_LEGACY_BASE_URL || 'https://www.nanet.go.kr/search/openApi/search.do',
 	apiKey: process.env.NANET_API_KEY || '',
 	perPageCap: 100
 };
@@ -811,22 +812,36 @@ async function fetchNanetTrendCount(keyword, fromDate, toDate) {
 		return 0;
 	}
 
-	const url = new URL(NANET_CONFIG.baseUrl);
-	url.searchParams.set('key', apiKey);
-	url.searchParams.set('query', keyword);
-	url.searchParams.set('pageSize', '1');
-	url.searchParams.set('pageNum', '1');
-	url.searchParams.set('resultType', 'json');
-	url.searchParams.set('sort', 'RANK');
-	url.searchParams.set('startDate', String(fromDate || '').replace(/-/g, ''));
-	url.searchParams.set('endDate', String(toDate || '').replace(/-/g, ''));
-
-	const json = await fetchJsonWithRetries(url.toString(), {
-		headers: { Accept: 'application/json' },
-		errorContext: 'NANET trend'
+	const candidates = buildNanetRequestCandidates({
+		topic: keyword,
+		pageSize: 1,
+		apiKey,
+		startDate: String(fromDate || '').replace(/-/g, ''),
+		endDate: String(toDate || '').replace(/-/g, '')
 	});
 
-	return parseIntegerCount(json?.totalCount || json?.result?.totalCount || 0);
+	let lastError = null;
+	for (let i = 0; i < candidates.length; i += 1) {
+		const candidate = candidates[i];
+		try {
+			const json = await fetchJsonWithRetries(candidate.url, {
+				headers: { Accept: 'application/json' },
+				errorContext: `NANET trend ${candidate.label}`
+			});
+			const total = extractNanetTotalCount(json, extractNanetDocuments(json).length);
+			if (total > 0 || i === candidates.length - 1) {
+				return parseIntegerCount(total);
+			}
+		} catch (error) {
+			lastError = error;
+			console.error(`[NANET trend] candidate 실패: ${candidate.label} name=${error?.name} message=${error?.message}`);
+		}
+	}
+
+	if (lastError) {
+		console.error(`[NANET trend] 모든 후보 실패: name=${lastError?.name} message=${lastError?.message}`);
+	}
+	return 0;
 }
 
 function normalizeTrendKeywordConfig(input) {
@@ -1253,44 +1268,63 @@ async function searchNanetPapers(options) {
 		return { data: [], meta: { skipped: true, reason: 'No NANET API key' } };
 	}
 
-	try {
-		const requestUrl = buildNanetUrl({
-			topic,
-			pageSize,
-			apiKey
-		});
-		console.log(`[NANET] 요청 시작: query="${topic}" url=${redactSensitiveUrl(requestUrl)}`);
+	const candidates = buildNanetRequestCandidates({ topic, pageSize, apiKey });
+	let lastError = null;
+	let bestEmptyMeta = null;
 
-		const response = await fetchJsonWithRetries(requestUrl, {
-			headers: { Accept: 'application/json' },
-			errorContext: 'NANET'
-		});
+	for (const candidate of candidates) {
+		try {
+			console.log(`[NANET] 요청 시작: query="${topic}" candidate=${candidate.label} url=${redactSensitiveUrl(candidate.url)}`);
+			const response = await fetchJsonWithRetries(candidate.url, {
+				headers: { Accept: 'application/json' },
+				errorContext: `NANET ${candidate.label}`
+			});
 
-		const records = Array.isArray(response?.documents)
-			? response.documents
+			const docs = extractNanetDocuments(response);
+			const records = docs
 				.map((doc) => normalizeNanetRecord(doc, fromYear, untilYear))
-				.filter(Boolean)
-			: [];
-		console.log(`[NANET] 응답 성공: 결과=${records.length}건 (totalCount=${Number(response?.totalCount) || '?'})`);
+				.filter(Boolean);
+			const totalCount = extractNanetTotalCount(response, records.length);
+			console.log(`[NANET] 응답 성공: candidate=${candidate.label} 결과=${records.length}건 (totalCount=${totalCount})`);
 
-		return {
-			data: records,
-			meta: {
-				totalFetched: records.length,
-				requestUrl,
-				totalCount: Number(response?.totalCount) || records.length
+			if (records.length > 0 || totalCount > 0) {
+				return {
+					data: records,
+					meta: {
+						totalFetched: records.length,
+						requestUrl: candidate.url,
+						totalCount,
+						candidate: candidate.label
+					}
+				};
 			}
-		};
-	} catch (error) {
-		console.error(`[NANET] 에러: name=${error && error.name} message=${error && error.message}`);
-		return {
-			data: [],
-			meta: {
-				skipped: true,
-				reason: error && error.message ? error.message : 'NANET API request failed'
+
+			if (!bestEmptyMeta) {
+				bestEmptyMeta = {
+					totalFetched: 0,
+					requestUrl: candidate.url,
+					totalCount,
+					candidate: candidate.label
+				};
 			}
-		};
+		} catch (error) {
+			lastError = error;
+			console.error(`[NANET] candidate 실패: ${candidate.label} name=${error?.name} message=${error?.message}`);
+		}
 	}
+
+	if (bestEmptyMeta) {
+		return { data: [], meta: bestEmptyMeta };
+	}
+
+	console.error(`[NANET] 에러: name=${lastError && lastError.name} message=${lastError && lastError.message}`);
+	return {
+		data: [],
+		meta: {
+			skipped: true,
+			reason: lastError && lastError.message ? lastError.message : 'NANET API request failed'
+		}
+	};
 }
 
 async function translateTopicToEnglish(topic) {
@@ -1937,13 +1971,77 @@ function buildOpenAlexUrl(options) {
 function buildNanetUrl(options) {
 	const { topic, pageSize, apiKey } = options;
 	const url = new URL(NANET_CONFIG.baseUrl);
-	// openapi.nanet.go.kr API v1 파라미터 스펙
 	url.searchParams.set('apiKey', apiKey);
 	url.searchParams.set('searchKey', topic);
 	url.searchParams.set('pageSize', String(Math.min(pageSize, NANET_CONFIG.perPageCap)));
 	url.searchParams.set('pageNum', '1');
 	url.searchParams.set('resultType', 'json');
 	return url.toString();
+}
+
+function buildNanetRequestCandidates(options) {
+	const { topic, pageSize, apiKey, startDate, endDate } = options;
+	const bases = dedupeStringArray([
+		String(NANET_CONFIG.baseUrl || '').trim(),
+		String(NANET_CONFIG.legacyBaseUrl || '').trim()
+	]).filter(Boolean);
+
+	const candidates = [];
+	for (const base of bases) {
+		const modernUrl = new URL(base);
+		modernUrl.searchParams.set('apiKey', apiKey);
+		modernUrl.searchParams.set('searchKey', topic);
+		modernUrl.searchParams.set('pageSize', String(Math.min(pageSize, NANET_CONFIG.perPageCap)));
+		modernUrl.searchParams.set('pageNum', '1');
+		modernUrl.searchParams.set('resultType', 'json');
+		if (startDate) modernUrl.searchParams.set('startDate', startDate);
+		if (endDate) modernUrl.searchParams.set('endDate', endDate);
+		candidates.push({ label: `${base.includes('openapi') ? 'openapi' : 'legacy'}-modern`, url: modernUrl.toString() });
+
+		const legacyUrl = new URL(base);
+		legacyUrl.searchParams.set('key', apiKey);
+		legacyUrl.searchParams.set('query', topic);
+		legacyUrl.searchParams.set('pageSize', String(Math.min(pageSize, NANET_CONFIG.perPageCap)));
+		legacyUrl.searchParams.set('pageNum', '1');
+		legacyUrl.searchParams.set('resultType', 'json');
+		legacyUrl.searchParams.set('sort', 'RANK');
+		if (startDate) legacyUrl.searchParams.set('startDate', startDate);
+		if (endDate) legacyUrl.searchParams.set('endDate', endDate);
+		candidates.push({ label: `${base.includes('openapi') ? 'openapi' : 'legacy'}-legacy`, url: legacyUrl.toString() });
+	}
+
+	return dedupeByKey(candidates, (item) => item.url);
+}
+
+function extractNanetDocuments(payload) {
+	if (!payload) return [];
+	if (Array.isArray(payload)) return payload;
+	if (Array.isArray(payload.documents)) return payload.documents;
+	if (Array.isArray(payload.items)) return payload.items;
+	if (Array.isArray(payload.data)) return payload.data;
+	if (Array.isArray(payload.result?.documents)) return payload.result.documents;
+	if (Array.isArray(payload.result?.items)) return payload.result.items;
+	if (Array.isArray(payload.resultList)) return payload.resultList;
+	if (Array.isArray(payload.list)) return payload.list;
+	return [];
+}
+
+function extractNanetTotalCount(payload, fallback = 0) {
+	const candidates = [
+		payload?.totalCount,
+		payload?.count,
+		payload?.result?.totalCount,
+		payload?.result?.count,
+		payload?.meta?.totalCount,
+		payload?.meta?.count
+	];
+	for (const value of candidates) {
+		const num = Number(value);
+		if (Number.isFinite(num) && num >= 0) {
+			return num;
+		}
+	}
+	return Number(fallback) || 0;
 }
 
 async function fetchJsonWithRetries(url, options) {
