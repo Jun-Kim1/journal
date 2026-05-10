@@ -704,6 +704,10 @@
         scroll-behavior: auto !important;
       }
 
+      .accept-stamp {
+        display: none !important;
+      }
+
       .loading-shell,
       .result-shell,
       .scope-card,
@@ -1931,6 +1935,101 @@
       text-transform: uppercase;
     }
 
+    .brand-logo-wrap {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 144px;
+      min-height: 40px;
+    }
+
+    .accept-stamp {
+      --stamp-rotate: -8deg;
+      --stamp-shift-x: 0px;
+      --stamp-shift-y: 0px;
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 106px;
+      height: 106px;
+      transform: translate(calc(-50% + var(--stamp-shift-x)), calc(-50% + var(--stamp-shift-y))) rotate(var(--stamp-rotate)) scale(0.72);
+      border-radius: 50%;
+      border: 3px solid rgba(198, 40, 40, 0.58);
+      background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.66), rgba(255, 255, 255, 0.08) 60%, rgba(255, 255, 255, 0) 100%);
+      box-shadow: 0 8px 18px rgba(185, 28, 28, 0.16), inset 0 0 0 1px rgba(255, 255, 255, 0.55);
+      opacity: 0;
+      pointer-events: none;
+      z-index: 2;
+      will-change: transform, opacity;
+    }
+
+    .accept-stamp::before {
+      content: '';
+      position: absolute;
+      inset: 8px;
+      border-radius: 50%;
+      border: 1.8px dashed rgba(198, 40, 40, 0.35);
+    }
+
+    .accept-stamp-ink {
+      position: absolute;
+      left: 50%;
+      top: 46%;
+      transform: translate(-50%, -50%);
+      font-family: 'Manrope', 'Pretendard', sans-serif;
+      font-size: 17px;
+      font-weight: 900;
+      letter-spacing: 0.1em;
+      color: rgba(185, 28, 28, 0.82);
+      text-transform: uppercase;
+    }
+
+    .accept-stamp-check {
+      position: absolute;
+      left: 50%;
+      top: 66%;
+      transform: translate(-50%, -50%);
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      font-size: 18px;
+      font-weight: 800;
+      color: rgba(185, 28, 28, 0.9);
+      border: 2px solid rgba(185, 28, 28, 0.55);
+      background: rgba(255, 255, 255, 0.52);
+      line-height: 1;
+    }
+
+    .accept-stamp.is-visible {
+      animation: acceptStampHit 3.1s cubic-bezier(.2, .9, .26, 1) forwards;
+    }
+
+    @keyframes acceptStampHit {
+      0% {
+        opacity: 0;
+        transform: translate(calc(-50% + var(--stamp-shift-x)), calc(-50% + var(--stamp-shift-y) - 10px)) rotate(var(--stamp-rotate)) scale(1.88);
+      }
+      16% {
+        opacity: 0.95;
+        transform: translate(calc(-50% + var(--stamp-shift-x)), calc(-50% + var(--stamp-shift-y))) rotate(var(--stamp-rotate)) scale(0.94);
+      }
+      26% {
+        opacity: 0.9;
+        transform: translate(calc(-50% + var(--stamp-shift-x)), calc(-50% + var(--stamp-shift-y))) rotate(var(--stamp-rotate)) scale(1.05);
+      }
+      68% {
+        opacity: 0.74;
+        transform: translate(calc(-50% + var(--stamp-shift-x)), calc(-50% + var(--stamp-shift-y))) rotate(var(--stamp-rotate)) scale(1);
+      }
+      100% {
+        opacity: 0;
+        transform: translate(calc(-50% + var(--stamp-shift-x)), calc(-50% + var(--stamp-shift-y))) rotate(var(--stamp-rotate)) scale(1.07);
+      }
+    }
+
     .logo-mark {
       display: none;
     }
@@ -2121,7 +2220,7 @@
       padding: 18px 20px;
       box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8) inset;
       transition: transform .18s ease, box-shadow .18s ease;
-      cursor: pointer;
+      cursor: default;
     }
 
     .trend-card:hover {
@@ -3344,6 +3443,17 @@
       .wrap { width: min(96vw, 980px); padding: 40px 10px 48px; }
       .brand { justify-content: flex-start; text-align: left; margin-bottom: 80px; flex-wrap: wrap; }
       .brand-logo { font-size: 14px; }
+      .brand-logo-wrap { min-width: 122px; min-height: 34px; }
+      .accept-stamp {
+        width: 90px;
+        height: 90px;
+      }
+      .accept-stamp-ink { font-size: 14px; }
+      .accept-stamp-check {
+        width: 24px;
+        height: 24px;
+        font-size: 14px;
+      }
       .logo-mark { width: 16px; height: 16px; }
       .logo-strong { font-size: 16px; }
       .logo-light { font-size: 13px; }
@@ -3393,6 +3503,18 @@
       .loading-topic-text { font-size: 15px; }
       .loading-steps { font-size: 14px !important; }
       .loading-skeleton { grid-template-columns: 1fr; }
+
+      .loading-topic-card {
+        grid-template-columns: 1fr;
+        justify-items: center;
+        text-align: center;
+        gap: 8px;
+      }
+
+      .loading-topic-label,
+      .loading-topic-text {
+        text-align: center;
+      }
     }
 
     @media (max-width: 640px) {
@@ -3411,6 +3533,21 @@
       .brand::after {
         font-size: 10px;
         padding: 6px 10px;
+      }
+
+      .accept-stamp {
+        width: 78px;
+        height: 78px;
+      }
+
+      .accept-stamp-ink {
+        font-size: 11px;
+      }
+
+      .accept-stamp-check {
+        width: 22px;
+        height: 22px;
+        font-size: 12px;
       }
 
       .hero {
@@ -3456,6 +3593,10 @@
       .search-field {
         height: 54px;
         padding-left: 16px;
+      }
+
+      .loading-topic-card {
+        padding: 14px 12px;
       }
 
       #topic {
@@ -3987,7 +4128,13 @@
     <section id="search-page" class="page active">
       <div class="brand">
         <div class="brand-name"><span class="brand-primary">Original</span><span class="brand-dot">.</span></div>
-        <div class="brand-logo" aria-label="Novelty Research Analysis">Novelty.ai</div>
+        <div class="brand-logo-wrap">
+          <div class="brand-logo" aria-label="Novelty Research Analysis">Novelty.ai</div>
+          <div id="acceptStamp" class="accept-stamp" aria-hidden="true">
+            <span class="accept-stamp-ink">ACCEPT</span>
+            <span class="accept-stamp-check">✓</span>
+          </div>
+        </div>
       </div>
       <div class="hero">
         <div class="hero-title-section">
@@ -4386,10 +4533,14 @@
     const topicInput = document.getElementById('topic');
     const trendingGrid = document.getElementById('trendingGrid');
     const trendingBasis = document.getElementById('trendingBasis');
+    const acceptStamp = document.getElementById('acceptStamp');
+    const searchPage = document.getElementById('search-page');
     let trendingRefreshTimer = null;
     let trendingRetryTimer = null;
     let trendingRetryAttempt = 0;
     let trendingRequestInFlight = false;
+    let acceptStampTimer = null;
+    let acceptStampHideTimer = null;
 
     const TRENDING_RETRY_CONFIG = {
       timeoutMs: 25000,
@@ -4843,6 +4994,7 @@
     });
 
     initializeScopeOptions();
+    scheduleAcceptStamp(2200);
     loadTrendingTopics();
     if (trendingRefreshTimer) clearInterval(trendingRefreshTimer);
     trendingRefreshTimer = setInterval(() => {
@@ -4855,14 +5007,87 @@
       if (includePreprintInput) includePreprintInput.checked = true;
     }
 
+    function isSearchPageVisible() {
+      return Boolean(searchPage && searchPage.classList.contains('active'));
+    }
+
+    function runAcceptStampEffect() {
+      if (!acceptStamp || !isSearchPageVisible() || document.hidden) {
+        return;
+      }
+
+      const rotations = [-14, -10, -7, -3, 4, 8, 12];
+      const rotate = rotations[Math.floor(Math.random() * rotations.length)];
+      const shiftX = (Math.random() * 14 - 7).toFixed(1);
+      const shiftY = (Math.random() * 10 - 5).toFixed(1);
+
+      acceptStamp.style.setProperty('--stamp-rotate', `${rotate}deg`);
+      acceptStamp.style.setProperty('--stamp-shift-x', `${shiftX}px`);
+      acceptStamp.style.setProperty('--stamp-shift-y', `${shiftY}px`);
+
+      acceptStamp.classList.remove('is-visible');
+      void acceptStamp.offsetWidth;
+      acceptStamp.classList.add('is-visible');
+
+      if (acceptStampHideTimer) {
+        clearTimeout(acceptStampHideTimer);
+      }
+      acceptStampHideTimer = setTimeout(() => {
+        acceptStamp.classList.remove('is-visible');
+      }, 3200);
+    }
+
+    function stopAcceptStampLoop() {
+      if (acceptStampTimer) {
+        clearTimeout(acceptStampTimer);
+        acceptStampTimer = null;
+      }
+      if (acceptStampHideTimer) {
+        clearTimeout(acceptStampHideTimer);
+        acceptStampHideTimer = null;
+      }
+      if (acceptStamp) {
+        acceptStamp.classList.remove('is-visible');
+      }
+    }
+
+    function scheduleAcceptStamp(delayOverrideMs) {
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        stopAcceptStampLoop();
+        return;
+      }
+      const delay = Number.isFinite(delayOverrideMs)
+        ? Math.max(1200, delayOverrideMs)
+        : (9000 + Math.floor(Math.random() * 3000));
+
+      if (acceptStampTimer) {
+        clearTimeout(acceptStampTimer);
+      }
+      acceptStampTimer = setTimeout(() => {
+        runAcceptStampEffect();
+        scheduleAcceptStamp();
+      }, delay);
+    }
+
     function showPage(id) {
       ['search-page', 'loading-page', 'result-page'].forEach((pageId) => {
         document.getElementById(pageId).classList.toggle('active', pageId === id);
       });
       if (id !== 'search-page') {
         closeTrendTopicModal();
+        stopAcceptStampLoop();
+      } else {
+        scheduleAcceptStamp(1600);
       }
     }
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        stopAcceptStampLoop();
+      } else if (isSearchPageVisible()) {
+        scheduleAcceptStamp(1200);
+      }
+    });
 
     function setLoadingState(loading) {
       analyzeButton.disabled = loading;
@@ -5157,8 +5382,8 @@
 
     function formatTrendGrowth(value) {
       const num = Number(value || 0);
-      if (!Number.isFinite(num)) return '안정적';
-      if (num < 5) return '안정적';
+      if (!Number.isFinite(num)) return '';
+      if (num < 5) return '';
       return '급상승';
     }
 
@@ -5182,30 +5407,20 @@
       items.slice(0, 4).forEach((item) => {
         const card = document.createElement('article');
         card.className = 'trend-card';
-        card.setAttribute('role', 'button');
-        card.tabIndex = 0;
 
         const growth = Number(item.growth_rate || 0);
         const growthClass = growth >= 5 ? 'positive' : 'neutral';
         const recentCount = Number(item.recent_count || 0);
+        const growthLabel = formatTrendGrowth(growth);
 
         card.innerHTML = `
           <div class="trend-card-top">
             <span class="trend-topic">${escapeHtml(String(item.topic || '-'))}</span>
-            <span class="trend-growth ${growthClass}">${escapeHtml(formatTrendGrowth(growth))}</span>
+            ${growthLabel ? `<span class="trend-growth ${growthClass}">${escapeHtml(growthLabel)}</span>` : ''}
           </div>
-          <button type="button" class="trend-pub-count-btn">지표 ${recentCount.toLocaleString()}건</button>
+          <button type="button" class="trend-pub-count-btn" aria-label="${escapeHtml(String(item.topic || ''))} 관련 논문 보기">지표 ${recentCount.toLocaleString()}건</button>
         `;
 
-        card.addEventListener('click', () => {
-          openTrendTopicModal(item);
-        });
-        card.addEventListener('keydown', (event) => {
-          if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault();
-            openTrendTopicModal(item);
-          }
-        });
         const countButton = card.querySelector('.trend-pub-count-btn');
         if (countButton) {
           countButton.addEventListener('click', (event) => {
@@ -5260,11 +5475,11 @@
       trendTopicModal.classList.remove('hidden');
 
       try {
-        const papers = await fetchTrendTopicPapers(topic, 20);
+        const papers = await fetchTrendTopicPapers(topic, 10);
         renderTrendTopicPaperList(papers);
       } catch (error) {
         console.error('[Trend topic papers] fetch failed:', error);
-        trendTopicModalList.innerHTML = '<p class="trend-topic-modal-empty">관련 논문을 불러오지 못했습니다. 잠시 후 다시 시도해주세요.</p>';
+        trendTopicModalList.innerHTML = '<p class="trend-topic-modal-empty">관련 논문을 준비 중입니다. 잠시 후 다시 시도해주세요.</p>';
       }
     }
 

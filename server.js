@@ -183,21 +183,46 @@ const server = http.createServer(async (req, res) => {
 				throw createError(400, 'topic 파라미터를 입력하세요.');
 			}
 
-			const limit = clampNumber(Number(requestUrl.searchParams.get('limit') || 20), 20, 5, 40);
+			const limit = clampNumber(Number(requestUrl.searchParams.get('limit') || 12), 12, 5, 20);
 			const rangeYears = clampNumber(Number(requestUrl.searchParams.get('rangeYears') || 5), 5, 3, 15);
+			const untilYear = new Date().getFullYear();
+			const fromYear = untilYear - rangeYears + 1;
 
-			const analyzed = await analyzeTopicSources({
-				topic,
-				rangeYears,
-				pageSize: 120,
-				recentWeight: 1,
-				similarityThreshold: 0.5,
-				sortOrder: 'latest',
-				paperTypes: ['학술지', '석사', '박사'],
-				globalTypes: ['journal', 'preprint']
-			});
+			const translatedTopic = await translateTopicToEnglish(topic);
+			const query = String(translatedTopic || topic || '').trim() || topic;
 
-			const papers = Array.isArray(analyzed?.data) ? analyzed.data : [];
+			const settled = await Promise.allSettled([
+				searchOpenAlexWorks({
+					translatedTopic: query,
+					fromYear,
+					untilYear,
+					globalTypes: ['journal', 'preprint'],
+					pageSize: Math.min(12, limit),
+					apiKey: OPENALEX_CONFIG.apiKey,
+					mailto: OPENALEX_CONFIG.mailto,
+					strictRelevance: false
+				}),
+				searchCrossrefPapers({
+					translatedTopic: query,
+					fromYear,
+					untilYear,
+					globalTypes: ['journal', 'preprint'],
+					pageSize: Math.min(12, limit),
+					strictRelevance: false
+				}),
+				searchArxivPapers({
+					translatedTopic: query,
+					fromYear,
+					untilYear,
+					pageSize: Math.min(8, limit)
+				})
+			]);
+
+			const papers = dedupeNormalizedRecords(
+				settled
+					.filter((entry) => entry.status === 'fulfilled')
+					.flatMap((entry) => Array.isArray(entry.value?.data) ? entry.value.data : [])
+			);
 			const sorted = [...papers].sort((a, b) => {
 				const yearGap = (Number(b?.year || 0) - Number(a?.year || 0));
 				if (yearGap !== 0) return yearGap;
