@@ -1134,6 +1134,37 @@
       padding: 20px;
     }
 
+    .mini-keyword-cloud {
+      margin-top: 8px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      min-height: 62px;
+      align-content: flex-start;
+    }
+
+    .mini-keyword-chip {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid #cfe0fa;
+      background: #f6faff;
+      color: #2f5d98;
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1;
+      white-space: nowrap;
+    }
+
+    .mini-keyword-empty {
+      margin: 0;
+      font-size: 12px;
+      color: #6b7e96;
+      font-weight: 600;
+    }
+
     .mini-kpi-value {
       font-size: 28px;
     }
@@ -2143,6 +2174,29 @@
       font-size: 15px;
       color: #6b7e96;
       font-weight: 600;
+    }
+
+    .trend-pub-count-btn {
+      margin-top: 8px;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      font-size: 15px;
+      color: #4f6f98;
+      font-weight: 700;
+      cursor: pointer;
+      text-align: left;
+    }
+
+    .trend-pub-count-btn:hover {
+      color: #1d4ed8;
+      text-decoration: underline;
+    }
+
+    .trend-pub-count-btn:focus-visible {
+      outline: 2px solid #60a5fa;
+      outline-offset: 2px;
+      border-radius: 4px;
     }
 
     .trend-no-data {
@@ -4217,8 +4271,8 @@
 
             <div class="mini-kpi-grid">
               <div class="kpi mini-kpi">
-                <h4>최근성 집중도</h4>
-                <div id="recentShare" class="num mini-kpi-value">0%</div>
+                <h4>핵심 키워드</h4>
+                <div id="recentKeywordCloud" class="mini-keyword-cloud"></div>
               </div>
               <div class="kpi mini-kpi">
                 <h4>총 문헌 수</h4>
@@ -4283,22 +4337,23 @@
           </div>
         </div>
 
-        <!-- 트렌드 토픽 논문 모달 -->
-        <div id="trendTopicModal" class="modal hidden">
-          <div class="modal-overlay"></div>
-          <div class="modal-content">
-            <div class="modal-header">
-              <h2 id="trendTopicModalTitle">트렌드 관련 논문</h2>
-              <button id="closeTrendTopicModalBtn" class="modal-close-btn">✕</button>
-            </div>
-            <div id="trendTopicModalList" class="trend-topic-modal-list"></div>
-            <div class="modal-footer">
-              <button id="closeTrendTopicModalBtnFooter" class="modal-action-btn">닫기</button>
-            </div>
-          </div>
-        </div>
       </div>
     </section>
+
+    <!-- 트렌드 토픽 논문 모달: 검색 페이지에서도 열리도록 page 섹션 바깥 배치 -->
+    <div id="trendTopicModal" class="modal hidden">
+      <div class="modal-overlay"></div>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2 id="trendTopicModalTitle">트렌드 관련 논문</h2>
+          <button id="closeTrendTopicModalBtn" class="modal-close-btn">✕</button>
+        </div>
+        <div id="trendTopicModalList" class="trend-topic-modal-list"></div>
+        <div class="modal-footer">
+          <button id="closeTrendTopicModalBtnFooter" class="modal-action-btn">닫기</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -4328,6 +4383,7 @@
     const loadingProgressBar = document.getElementById('loadingProgressBar');
     const resultSortOrder = document.getElementById('resultSortOrder');
     const queryLengthHint = document.getElementById('queryLengthHint');
+    const topicInput = document.getElementById('topic');
     const trendingGrid = document.getElementById('trendingGrid');
     const trendingBasis = document.getElementById('trendingBasis');
     let trendingRefreshTimer = null;
@@ -4685,9 +4741,21 @@
       queryLengthHint.textContent = '2,751만 편의 논문을 실시간으로 분석하여 당신의 연구가 얼마나 독창적인지 알려드립니다';
     });
 
+    if (topicInput) {
+      topicInput.addEventListener('keydown', (event) => {
+        // Enter submits search; Shift+Enter keeps multiline input.
+        if (event.isComposing) return;
+        if (event.key === 'Enter' && !event.shiftKey) {
+          event.preventDefault();
+          form.requestSubmit();
+        }
+      });
+    }
+
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       clearMessages();
+      closeTrendTopicModal();
 
       // 과거 세션의 잘못된 apiBase(github.io 등) 캐시를 제출 시점에도 한 번 더 정리
       if (window.localStorage) {
@@ -4791,6 +4859,9 @@
       ['search-page', 'loading-page', 'result-page'].forEach((pageId) => {
         document.getElementById(pageId).classList.toggle('active', pageId === id);
       });
+      if (id !== 'search-page') {
+        closeTrendTopicModal();
+      }
     }
 
     function setLoadingState(loading) {
@@ -5123,7 +5194,7 @@
             <span class="trend-topic">${escapeHtml(String(item.topic || '-'))}</span>
             <span class="trend-growth ${growthClass}">${escapeHtml(formatTrendGrowth(growth))}</span>
           </div>
-          <p class="trend-pub-count">지표 ${recentCount.toLocaleString()}건</p>
+          <button type="button" class="trend-pub-count-btn">지표 ${recentCount.toLocaleString()}건</button>
         `;
 
         card.addEventListener('click', () => {
@@ -5135,6 +5206,13 @@
             openTrendTopicModal(item);
           }
         });
+        const countButton = card.querySelector('.trend-pub-count-btn');
+        if (countButton) {
+          countButton.addEventListener('click', (event) => {
+            event.stopPropagation();
+            openTrendTopicModal(item);
+          });
+        }
         trendingGrid.appendChild(card);
       });
     }
@@ -5842,20 +5920,106 @@
       const noveltyScoreDesc = `창신성 지수는 ${noveltyScore}점입니다.`;
 
       // 검색 규모
-      const countDesc = globalCount > 0 ? `총 ${globalCount}건 기준으로 분석했습니다.` : '';
+      let countDesc = '';
+      if (domesticCount > 0 && globalCount > 0) {
+        countDesc = `국내 ${domesticCount}건, 해외 ${globalCount}건 기준으로 분석했습니다.`;
+      } else if (globalCount > 0) {
+        countDesc = `해외 ${globalCount}건 기준으로 분석했습니다.`;
+      } else if (domesticCount > 0) {
+        countDesc = `국내 ${domesticCount}건 기준으로 분석했습니다.`;
+      }
 
-      // 영문 변환어: 첫 번째 공백 전 단어 5개 정도만 추출해서 깔끔하게 보여줌
-      const primaryEn = String(translatedTopic || '').split(/\s+/).slice(0, 6).join(' ');
-      const enDesc = primaryEn ? `주제의 영문 검색어는 "${primaryEn}…"으로 매핑되었습니다.` : '';
+      // 검색어 변환 설명
+      const sourceTopic = String(latestPayload?.topic || '').trim();
+      const targetTopic = String(translatedTopic || '').trim();
+      const enDesc = sourceTopic && targetTopic && sourceTopic !== targetTopic
+        ? `국문 검색어 "${sourceTopic}"를 영문 학술 검색어 "${targetTopic}"로 변환해 검색했습니다.`
+        : (targetTopic ? `영문 학술 검색어 "${targetTopic}"로 검색했습니다.` : '');
 
       // 유사 논문의 주요 키워드
       const topKw = keywordFreq.slice(0, 5).map((item) => item.keyword);
-      const kwDesc = topKw.length ? `유사 논문에서 자주 등장한 키워드는 ${topKw.join(', ')}입니다.` : '';
+      const kwDesc = topKw.length ? `핵심 키워드는 ${topKw.join(', ')}입니다.` : '';
 
       // 발표 피크
       const peakDesc = peak && peak.count > 0 ? `${peak.year}년에 발표량이 가장 높았습니다.` : '';
 
       return [noveltyDesc, simDesc, noveltyScoreDesc, countDesc, enDesc, kwDesc, peakDesc].filter(Boolean).join(' ');
+    }
+
+    function buildReadableInsightText(analysis, sourceTopic) {
+      const score = Math.round(Number(analysis?.noveltyScore || 0));
+      const topAvg = Number(analysis?.topAvg || 0);
+      const highShare = Number(analysis?.highSimilarityShare || 0);
+      const scarcity = Math.round(Number(analysis?.scarcityScore || 0) * 100);
+      const domestic = Number(analysis?.domesticCount || 0);
+      const global = Number(analysis?.globalCount || 0);
+      const yearDist = Array.isArray(analysis?.yearDist) ? analysis.yearDist : [];
+      const peak = [...yearDist].sort((a, b) => Number(b?.count || 0) - Number(a?.count || 0))[0];
+      const topicEn = String(analysis?.translatedTopic || '').trim();
+      const keywords = (Array.isArray(analysis?.keywordFreq) ? analysis.keywordFreq : [])
+        .slice(0, 5)
+        .map((item) => String(item?.keyword || '').trim())
+        .filter(Boolean);
+
+      const noveltyDesc = score >= 78
+        ? '유사 선행연구가 적어 차별화 가능성이 높습니다.'
+        : score >= 55
+          ? '유사 선행연구가 일부 있어 연구 설계 차별화가 중요합니다.'
+          : '유사 선행연구가 많아 연구 질문과 방법의 차별화가 필요합니다.';
+
+      const simDesc = `상위 유사도 평균은 ${Math.round(topAvg * 100)}%이고, 고유사도 문헌 비중은 ${Math.round(highShare * 100)}%입니다.`;
+      const scarcityDesc = `희소성 지표는 ${scarcity}점입니다.`;
+
+      let countDesc = '';
+      if (domestic > 0 && global > 0) {
+        countDesc = `국내 ${domestic}건, 해외 ${global}건 기준으로 분석했습니다.`;
+      } else if (global > 0) {
+        countDesc = `해외 ${global}건 기준으로 분석했습니다.`;
+      } else if (domestic > 0) {
+        countDesc = `국내 ${domestic}건 기준으로 분석했습니다.`;
+      }
+
+      const mappingDesc = sourceTopic && topicEn && sourceTopic !== topicEn
+        ? `국문 검색어 "${sourceTopic}"를 영문 학술 검색어 "${topicEn}"로 변환해 검색했습니다.`
+        : (topicEn ? `영문 학술 검색어 "${topicEn}"로 검색했습니다.` : '');
+
+      const keywordDesc = keywords.length ? `핵심 키워드는 ${keywords.join(', ')}입니다.` : '';
+      const peakDesc = peak && Number(peak.count || 0) > 0 ? `${peak.year}년에 발표량이 가장 높았습니다.` : '';
+
+      return [noveltyDesc, simDesc, scarcityDesc, countDesc, mappingDesc, keywordDesc, peakDesc]
+        .filter(Boolean)
+        .join(' ')
+        .replace(/국내\s*0건,?\s*/g, '')
+        .replace(/국내\s*0건\s*기준으로\s*분석했습니다\.?/g, '');
+    }
+
+    function renderMiniKeywordCloud(keywords) {
+      const target = document.getElementById('recentKeywordCloud');
+      if (!target) return;
+      target.innerHTML = '';
+
+      const items = (Array.isArray(keywords) ? keywords : [])
+        .slice(0, 10)
+        .map((item) => ({
+          keyword: String(item?.keyword || '').trim(),
+          count: Number(item?.count || 0)
+        }))
+        .filter((item) => item.keyword.length > 0);
+
+      if (!items.length) {
+        target.innerHTML = '<p class="mini-keyword-empty">키워드 데이터가 아직 충분하지 않습니다.</p>';
+        return;
+      }
+
+      const maxCount = Math.max(1, ...items.map((item) => item.count));
+      items.forEach((item) => {
+        const chip = document.createElement('span');
+        chip.className = 'mini-keyword-chip';
+        const scale = 0.92 + (Math.max(0, item.count) / maxCount) * 0.22;
+        chip.style.transform = `scale(${Math.min(1.14, scale).toFixed(2)})`;
+        chip.textContent = item.keyword;
+        target.appendChild(chip);
+      });
     }
 
     function renderWarnings(meta) {
@@ -5916,9 +6080,11 @@
       const reportScopeEl = document.getElementById('reportScope');
       if (reportScopeEl) reportScopeEl.textContent = analysis.reportScope;
       const insightBoxEl = document.getElementById('insightBox');
-      if (insightBoxEl) insightBoxEl.textContent = analysis.insight;
-      const recentShareEl = document.getElementById('recentShare');
-      if (recentShareEl) recentShareEl.textContent = formatPercent(analysis.recentShare);
+      if (insightBoxEl) {
+        const sourceTopic = String(latestPayload?.topic || '').trim();
+        insightBoxEl.textContent = buildReadableInsightText(analysis, sourceTopic);
+      }
+      renderMiniKeywordCloud(safeKeywords);
       const matchCountEl = document.getElementById('matchCount');
       if (matchCountEl) matchCountEl.textContent = String(analysis.matchCount);
       const sourceSummaryEl = document.getElementById('sourceSummary');
