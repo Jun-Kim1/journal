@@ -85,14 +85,14 @@ const NANET_DETAIL_CONFIG = {
 };
 
 const TREND_KEYWORDS = [
-	{ topic: '생성형 AI', globalQuery: 'Large Language Models', domesticQuery: '생성형 인공지능' },
-	{ topic: '양자 컴퓨팅', globalQuery: 'Quantum Computing', domesticQuery: '양자 컴퓨팅' },
-	{ topic: '기후변화 모델링', globalQuery: 'Climate Change Modeling', domesticQuery: '기후변화 모델링' },
-	{ topic: '유전자 편집', globalQuery: 'CRISPR Gene Editing', domesticQuery: '유전자 편집' },
-	{ topic: '멀티모달 AI', globalQuery: 'Multimodal AI', domesticQuery: '멀티모달 인공지능' },
-	{ topic: '트랜스포머 아키텍처', globalQuery: 'Transformer Architecture', domesticQuery: '트랜스포머' },
-	{ topic: '연합학습', globalQuery: 'Federated Learning', domesticQuery: '연합학습' },
-	{ topic: '확산모델', globalQuery: 'Diffusion Models', domesticQuery: '확산 모델' }
+	{ topic: 'Large Language Models', globalQuery: 'Large Language Models', domesticQuery: '생성형 인공지능' },
+	{ topic: 'Quantum Computing', globalQuery: 'Quantum Computing', domesticQuery: '양자 컴퓨팅' },
+	{ topic: 'Climate Change Modeling', globalQuery: 'Climate Change Modeling', domesticQuery: '기후변화 모델링' },
+	{ topic: 'CRISPR Gene Editing', globalQuery: 'CRISPR Gene Editing', domesticQuery: '유전자 편집' },
+	{ topic: 'Multimodal AI', globalQuery: 'Multimodal AI', domesticQuery: '멀티모달 인공지능' },
+	{ topic: 'Transformer Architecture', globalQuery: 'Transformer Architecture', domesticQuery: '트랜스포머' },
+	{ topic: 'Federated Learning', globalQuery: 'Federated Learning', domesticQuery: '연합학습' },
+	{ topic: 'Diffusion Models', globalQuery: 'Diffusion Models', domesticQuery: '확산 모델' }
 ];
 const TREND_CACHE_TTL_MS = 30 * 60 * 1000;
 const TREND_MIN_GROWTH_RATE = 5;
