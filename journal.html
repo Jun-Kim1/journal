@@ -5223,10 +5223,10 @@
 
     initializeScopeOptions();
     scheduleAcceptStamp(4200);
-    loadTrendingTopics();
+    loadTrendingTopics(true);
     if (trendingRefreshTimer) clearInterval(trendingRefreshTimer);
     trendingRefreshTimer = setInterval(() => {
-      loadTrendingTopics();
+      loadTrendingTopics(true);
     }, 30 * 60 * 1000);
 
     function initializeScopeOptions() {
