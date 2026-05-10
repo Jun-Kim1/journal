@@ -250,7 +250,7 @@ function buildAnalysisReport(cfg, records, meta) {
 		subScores,
 		rationale,
 		calculationLogic,
-		insight: buildAnalysisInsight({ noveltyScore, recentShare, topAvg, domesticCount, globalCount, translatedTopic, keywordFreq, yearDist, highSimilarityShare, scarcityScore })
+		insight: buildAnalysisInsight({ noveltyScore, recentShare, topAvg, domesticCount, globalCount, sourceTopic: cfg.topic, translatedTopic, keywordFreq, yearDist, highSimilarityShare, scarcityScore })
 	};
 }
 
@@ -747,13 +747,22 @@ function buildNoveltyRationale(options) {
 		globalCount
 	} = options;
 
+	let sourceCoverageDesc = '';
+	if (domesticCount > 0 && globalCount > 0) {
+		sourceCoverageDesc = `국내 ${domesticCount}건, 해외 ${globalCount}건 문헌을 함께 반영했습니다.`;
+	} else if (globalCount > 0) {
+		sourceCoverageDesc = `해외 ${globalCount}건 문헌을 반영했습니다.`;
+	} else if (domesticCount > 0) {
+		sourceCoverageDesc = `국내 ${domesticCount}건 문헌을 반영했습니다.`;
+	}
+
 	return [
 		`유사도 평균 ${Math.round(topAvg * 100)}%로 ${topAvg < 0.3 ? '낮은 중복' : topAvg < 0.5 ? '중간 수준의 중복' : '높은 중복'} 상태입니다.`,
 		`최근 5년 집중도 ${Math.round(recentShare * 100)}%로 ${recentShare < 0.35 ? '희소 분야 성격이 강합니다' : recentShare < 0.6 ? '완만한 증가 추세입니다' : '최근 연구 집중도가 높습니다'}.`,
 		`희소성 지표 ${Math.round(scarcityScore * 100)}점으로 핵심 키워드 반복 빈도를 반영했습니다.`,
 		`고유사도 문헌 비중은 ${Math.round(highSimilarityShare * 100)}%입니다.`,
-		`국내 ${domesticCount}건, 해외 ${globalCount}건 문헌을 함께 반영했습니다.`
-	];
+		sourceCoverageDesc
+	].filter(Boolean);
 }
 
 function buildAnalysisInsight(options) {
@@ -763,6 +772,7 @@ function buildAnalysisInsight(options) {
 		topAvg,
 		domesticCount,
 		globalCount,
+		sourceTopic,
 		translatedTopic,
 		keywordFreq,
 		yearDist,
@@ -773,40 +783,43 @@ function buildAnalysisInsight(options) {
 	const topKw = keywordFreq.slice(0, 5).map((item) => item.keyword);
 	const verdict = classifyNovelty(noveltyScore);
 
-	// 참신성 평가
 	const noveltyDesc = verdict.summary;
-
-	// 유사도 수준
 	const simDesc = topAvg >= 0.65
 		? `상위 유사도 평균은 ${Math.round(topAvg * 100)}%로 높은 편입니다.`
 		: topAvg >= 0.4
 			? `상위 유사도 평균은 ${Math.round(topAvg * 100)}%입니다.`
 			: `상위 유사도 평균은 ${Math.round(topAvg * 100)}%로 낮아 희소한 주제입니다.`;
-
-	// 창신성 지수
 	const scoreDesc = `창신성 지수는 ${noveltyScore}점입니다.`;
 
-	// 검색 규모
-	const countDesc = (domesticCount + globalCount) > 0
-		? `총 ${domesticCount + globalCount}건 기준으로 분석했습니다.`
-		: '';
+	let countDesc = '';
+	if (domesticCount > 0 && globalCount > 0) {
+		countDesc = `국내 ${domesticCount}건, 해외 ${globalCount}건 기준으로 분석했습니다.`;
+	} else if (globalCount > 0) {
+		countDesc = `해외 ${globalCount}건 기준으로 분석했습니다.`;
+	} else if (domesticCount > 0) {
+		countDesc = `국내 ${domesticCount}건 기준으로 분석했습니다.`;
+	}
 
-	// 영문 검색어: 너무 길면 앞 6개 단어만 표시
-	const enTokens = String(translatedTopic || '').split(/\s+/).filter(Boolean);
-	const enShort = enTokens.slice(0, 6).join(' ');
-	const enDesc = enShort
-		? `영문 검색어는 "${enShort}${enTokens.length > 6 ? '…' : ''}"으로 매핑되었습니다.`
-		: '';
+	const koTopic = String(sourceTopic || '').trim();
+	const enTopic = String(translatedTopic || '').trim();
+	const enDesc = koTopic && enTopic && koTopic !== enTopic
+		? `국문 검색어 "${koTopic}"를 영문 학술 검색어 "${enTopic}"로 변환해 매핑했습니다.`
+		: (enTopic ? `영문 학술 검색어 "${enTopic}"로 매핑했습니다.` : '');
 
-	// 유사 논문 주요 키워드
 	const kwDesc = topKw.length
 		? `유사 논문에서 자주 등장한 키워드는 ${topKw.join(', ')}입니다.`
 		: '';
-
-	// 발표 피크
 	const peakDesc = peak && peak.count > 0 ? `${peak.year}년에 발표량이 가장 높았습니다.` : '';
 
-	return [noveltyDesc, simDesc, scoreDesc, countDesc, enDesc, kwDesc, peakDesc].filter(Boolean).join(' ');
+	return [
+		noveltyDesc,
+		simDesc,
+		scoreDesc,
+		countDesc,
+		enDesc,
+		kwDesc,
+		peakDesc
+	].filter(Boolean).join(' ');
 }
 
 function buildGapAnalysisReport(options) {
@@ -823,7 +836,6 @@ function buildGapAnalysisReport(options) {
 		keywordFreq,
 		yearDist,
 		similarPapers,
-		translatedTopic,
 		matchCount
 	} = options;
 
@@ -832,16 +844,21 @@ function buildGapAnalysisReport(options) {
 	const recentPeak = [...(yearDist || [])].sort((a, b) => b.count - a.count)[0];
 	const whitespaceLevel = noveltyScore >= 78 ? 'high' : noveltyScore >= 55 ? 'medium' : 'low';
 	const overlapLevel = topAvg >= 0.5 ? 'dense' : topAvg >= 0.28 ? 'moderate' : 'light';
-	const opportunitySignals = [];
-	const riskFlags = [];
-	const recommendedAngles = [];
+		let countDesc = '';
+		if (domesticCount > 0 && globalCount > 0) {
+			countDesc = `국내 ${domesticCount}건, 해외 ${globalCount}건 기준으로 분석했습니다.`;
+		} else if (globalCount > 0) {
+			countDesc = `해외 ${globalCount}건 기준으로 분석했습니다.`;
+		} else if (domesticCount > 0) {
+			countDesc = `국내 ${domesticCount}건 기준으로 분석했습니다.`;
+		}
 
-	if (scarcityScore >= 0.65) {
-		opportunitySignals.push('핵심 키워드 조합이 기존 코퍼스에서 반복적으로 소비되지 않아 개념적 공백이 존재합니다.');
-	}
-	if (recentShare < 0.35) {
-		opportunitySignals.push('최근 3~5년 발표 집중도가 낮아 후속 연구 파이프라인이 아직 포화되지 않았습니다.');
-	}
+		// 국문 질의 -> 영문 학술 검색어 변환 설명
+		const koTopic = String(sourceTopic || '').trim();
+		const enTopic = String(translatedTopic || '').trim();
+		const enDesc = koTopic && enTopic && koTopic !== enTopic
+			? `국문 검색어 "${koTopic}"를 영문 학술 검색어 "${enTopic}"로 변환해 매핑했습니다.`
+			: (enTopic ? `영문 학술 검색어 "${enTopic}"로 매핑되었습니다.` : '');
 	if (creativityScore >= 0.58) {
 		opportunitySignals.push('키워드 조합의 연결 강도가 낮아 융합형 연구 질문으로 재구성할 여지가 큽니다.');
 	}

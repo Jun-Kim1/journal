@@ -177,6 +177,42 @@ const server = http.createServer(async (req, res) => {
 			return;
 		}
 
+		if (req.method === 'GET' && requestUrl.pathname === '/api/trending-topic-papers') {
+			const topic = String(requestUrl.searchParams.get('topic') || '').trim();
+			if (!topic) {
+				throw createError(400, 'topic 파라미터를 입력하세요.');
+			}
+
+			const limit = clampNumber(Number(requestUrl.searchParams.get('limit') || 20), 20, 5, 40);
+			const rangeYears = clampNumber(Number(requestUrl.searchParams.get('rangeYears') || 5), 5, 3, 15);
+
+			const analyzed = await analyzeTopicSources({
+				topic,
+				rangeYears,
+				pageSize: 120,
+				recentWeight: 1,
+				similarityThreshold: 0.5,
+				sortOrder: 'latest',
+				paperTypes: ['학술지', '석사', '박사'],
+				globalTypes: ['journal', 'preprint']
+			});
+
+			const papers = Array.isArray(analyzed?.data) ? analyzed.data : [];
+			const sorted = [...papers].sort((a, b) => {
+				const yearGap = (Number(b?.year || 0) - Number(a?.year || 0));
+				if (yearGap !== 0) return yearGap;
+				return Number(b?.citationCount || 0) - Number(a?.citationCount || 0);
+			});
+
+			sendJson(res, 200, {
+				ok: true,
+				topic,
+				count: papers.length,
+				data: sorted.slice(0, limit)
+			});
+			return;
+		}
+
 		if (req.method === 'POST' && requestUrl.pathname === '/api/nanet/article-trend') {
 			const body = await readJsonBody(req);
 			const searchTerm = String(body.searchTerm || body.topic || '').trim();
